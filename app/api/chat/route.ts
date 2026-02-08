@@ -1,0 +1,24 @@
+import { google } from '@ai-sdk/google';
+import {
+  convertToModelMessages,
+  streamText,
+  type LanguageModel,
+  type UIMessage,
+} from 'ai';
+
+export const maxDuration = 30;
+
+export async function POST(request: Request) {
+  const { messages }: { messages: UIMessage[] } = await request.json();
+  // Direct Google provider expects a raw Gemini model ID (no `google/` prefix).
+  const model = google('gemini-2.5-flash') as unknown as LanguageModel;
+
+  const result = streamText({
+    model,
+    system:
+      'Ты Gemini 2.5 Flash, ассистент готовый помочь с ежедневными вопросами и задачами.',
+    messages: await convertToModelMessages(messages),
+  });
+
+  return result.toUIMessageStreamResponse();
+}
