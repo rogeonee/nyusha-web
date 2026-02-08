@@ -5,10 +5,17 @@ import {
   type LanguageModel,
   type UIMessage,
 } from 'ai';
+import { getCurrentUser } from '@/lib/auth/session';
 
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { messages }: { messages: UIMessage[] } = await request.json();
   // Direct Google provider expects a raw Gemini model ID (no `google/` prefix).
   const model = google('gemini-2.5-flash') as unknown as LanguageModel;
