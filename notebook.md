@@ -136,3 +136,48 @@ Working notebook for implementation notes, patterns, warnings, and intermediate 
 - `pnpm db:migrate` was not run in this environment because no `POSTGRES_URL` for an actual target DB was provided.
 - Email uniqueness is case-normalized at app layer (lowercase); DB collation-specific case-insensitive enforcement (`citext`) is not added to keep Phase 1 minimal.
 - Chat persistence tables (`chats`, `messages`) are intentionally deferred to Phase 2.
+
+## 2026-02-14 - Phase 2 Implementation (Chat Persistence)
+
+### What changed
+
+- Added `@tanstack/react-query` dependency for client-side data fetching.
+- Extended DB schema with `chats` and `messages` tables:
+  - `chats`: id (client-generated UUID), user_id (FK to users, cascade), title, created_at.
+  - `messages`: id (AI SDK message ID), chat_id (FK to chats, cascade), role, parts (JSON), created_at.
+  - Added Drizzle relations and `Chat`/`Message` type exports.
+  - Generated and applied migration `drizzle/0001_careless_raider.sql`.
+- Added 6 query functions to `lib/db/queries.ts`: createChat, getChatById, getChatsByUserId, deleteChatById, saveMessages, getMessagesByChatId.
+- Rewrote `app/api/chat/route.ts`:
+  - POST now accepts `{ id, messages }` — creates chat on first message with title from first user text.
+  - Saves user message before streaming, saves assistant message via `onFinish` callback.
+  - Switched from `streamText().toUIMessageStreamResponse()` to `createUIMessageStream` + `createUIMessageStreamResponse` for `onFinish` access.
+  - Added DELETE handler with auth + ownership verification.
+- Created `app/api/history/route.ts` — GET returns user's chats (auth-gated).
+- Created `components/query-provider.tsx` — TanStack Query provider wrapper.
+- Created `components/sidebar.tsx` — client component with:
+  - `useQuery` for chat list from `/api/history`.
+  - `useMutation` for chat deletion with cache invalidation.
+  - Desktop: always visible 256px sidebar. Mobile: off-screen with toggle + backdrop.
+  - Loading skeleton, empty state, active chat highlight, hover-visible delete button.
+- Updated `components/chat.tsx`:
+  - Accepts `id` and `initialMessages` props.
+  - Sends `id` in request body via `DefaultChatTransport`.
+  - On finish: replaces URL from `/` to `/chat/{id}` for new chats, invalidates chat list query.
+- Created `(chat)` route group:
+  - `app/(chat)/layout.tsx` — server component with auth gate, wraps `QueryProvider` + `Sidebar` + main area.
+  - `app/(chat)/page.tsx` — new chat page, generates UUID server-side.
+  - `app/(chat)/chat/[id]/page.tsx` — existing chat page, loads messages from DB, verifies ownership.
+- Deleted old `app/page.tsx` (replaced by route group).
+
+### What was validated
+
+- `pnpm lint` (tsc --noEmit) passes.
+- `pnpm build` passes — routes: `/`, `/chat/[id]`, `/api/chat`, `/api/history`, `/login`, `/register`.
+- `pnpm db:migrate` applied successfully.
+
+### Open risks / follow-ups
+
+- Sidebar mobile toggle button overlaps with header content on small screens — may need layout adjustment.
+- No pagination on chat list — fine for 2-4 users but would need limits if user base grows.
+- Chat title is set once from first user message and never updated.

@@ -8,14 +8,35 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { IconArrowUp } from '@/components/ui/icons';
 import AboutCard from '@/components/cards/aboutcard';
+import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 
-export default function Chat() {
+export default function Chat({
+  id,
+  initialMessages = [],
+}: {
+  id: string;
+  initialMessages?: UIMessage[];
+}) {
   const [input, setInput] = useState<string>('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const queryClient = useQueryClient();
+
   const { messages, sendMessage, status } = useChat({
+    id,
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: '/api/chat',
+      body: { id },
     }),
+    onFinish: () => {
+      if (pathname === '/') {
+        router.replace(`/chat/${id}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    },
   });
 
   useEffect(() => {
