@@ -136,3 +136,33 @@ Working notebook for implementation notes, patterns, warnings, and intermediate 
 - `pnpm db:migrate` was not run in this environment because no `POSTGRES_URL` for an actual target DB was provided.
 - Email uniqueness is case-normalized at app layer (lowercase); DB collation-specific case-insensitive enforcement (`citext`) is not added to keep Phase 1 minimal.
 - Chat persistence tables (`chats`, `messages`) are intentionally deferred to Phase 2.
+
+## 2026-02-15 - Chat Timeout and Long-Wait UX
+
+### Assumptions
+
+- Production Vercel function-level timeouts are the direct cause of long-prompt failures observed by users in higher-latency regions.
+- The app already streams correctly; increasing route max duration is lower-risk than changing model/provider behavior.
+- A lightweight inline status message is sufficient UX feedback for slower responses.
+
+### Plan
+
+1. Increase `/api/chat` route max duration to reduce premature timeouts for longer reasoning responses.
+2. Add a user-facing message after 30 seconds while the assistant is still generating.
+3. Re-run TypeScript lint check as a smoke test.
+
+### What changed
+
+- Updated `/app/api/chat/route.ts` `maxDuration` from `30` to `90`.
+- Updated `/components/chat.tsx`:
+  - added a request-pending timer
+  - shows an additional message after 30 seconds: "Это может занять чуть больше времени. Все в порядке, запрос еще обрабатывается."
+
+### What was validated
+
+- Application build compilation reaches the type-check phase successfully after code bundling.
+- Full TypeScript validation currently fails due to a pre-existing unrelated type error in `lib/utils/chat-grouping.ts` (`Chat` export mismatch from `@/lib/db/schema`).
+
+### Open risks / follow-ups
+
+- If timeouts still occur for very long completions, next steps are increasing duration further (within plan limits) and/or reducing generation length for heavy prompts.
