@@ -181,3 +181,144 @@ Working notebook for implementation notes, patterns, warnings, and intermediate 
 - Sidebar mobile toggle button overlaps with header content on small screens — may need layout adjustment.
 - No pagination on chat list — fine for 2-4 users but would need limits if user base grows.
 - Chat title is set once from first user message and never updated.
+
+## 2026-02-15 - Sidebar Shell Rework Plan (ChatGPT-style blend)
+
+### Assumptions
+
+- This pass is strictly a chat-shell UI refactor; no auth/DB/API behavior changes are intended.
+- We should switch from the custom sidebar implementation to shadcn sidebar primitives to get reliable collapsed rail + mobile sheet behavior.
+- The shell should only apply to `(chat)` routes; login/register remain simple standalone pages.
+- Desktop should default to collapsed (`defaultOpen = false`) unless `sidebar_state=true` cookie exists.
+- Header controls stay top-right (theme toggle + logout) and model controls are deferred.
+
+### Plan
+
+1. Add shadcn sidebar primitives and required supporting UI files/dependencies.
+2. Replace chat layout shell with `SidebarProvider + AppSidebar + SidebarInset + ChatHeader`.
+3. Replace old custom sidebar component with `components/app-sidebar.tsx` using shadcn sidebar API.
+4. Add `components/chat-header.tsx` and remove global header usage from root layout.
+5. Update auth pages for full-height centering without global header offset.
+6. Tune sidebar color tokens for better dark-mode blend between sidebar/header/content.
+7. Run `pnpm lint` and `pnpm build`, then record validation and follow-ups.
+
+## 2026-02-15 - Sidebar Shell Rework Implementation (ChatGPT-style blend)
+
+### What changed
+
+- Added shadcn sidebar primitives and supporting UI building blocks:
+  - `components/ui/sidebar.tsx`
+  - `components/ui/sheet.tsx`
+  - `components/ui/tooltip.tsx`
+  - `components/ui/separator.tsx`
+  - `components/ui/skeleton.tsx`
+  - `hooks/use-mobile.ts`
+- Added required Radix dependencies for new primitives:
+  - `@radix-ui/react-dialog`
+  - `@radix-ui/react-separator`
+  - `@radix-ui/react-tooltip`
+- Replaced custom chat sidebar with new app shell sidebar:
+  - Added `components/app-sidebar.tsx`.
+  - Removed legacy `components/sidebar.tsx`.
+- Added blended chat header:
+  - `components/chat-header.tsx` with sidebar trigger, Nyusha title, theme toggle, logout.
+- Refactored layout ownership:
+  - `app/layout.tsx`: removed global `Header` render.
+  - `app/(chat)/layout.tsx`: now uses `SidebarProvider`, `AppSidebar`, `SidebarInset`, `ChatHeader`, and cookie-backed `defaultOpen` from `sidebar_state`.
+- Updated auth page vertical centering after global header removal:
+  - `app/login/page.tsx`
+  - `app/register/page.tsx`
+  - Replaced `min-h-[calc(100dvh-4rem)]` with `min-h-dvh`.
+- Tuned dark-mode sidebar tokens in `app/globals.css` to better blend sidebar/header/content surfaces.
+
+### What was validated
+
+- `pnpm lint` passes (`tsc --noEmit`).
+- `pnpm build` passes (Next.js production build).
+- Build output includes expected dynamic routes: `/`, `/chat/[id]`, `/api/chat`, `/api/history`, `/login`, `/register`.
+
+### Open risks / follow-ups
+
+- Sidebar collapse persistence is cookie-based and defaults to collapsed when cookie is absent; behavior should be visually verified in browser for first-load desktop/mobile interactions.
+- Env warning banner from `EnvCard` is no longer visible because global header was removed; if this warning is still desired, relocate it into chat shell or auth pages in a follow-up.
+- No toast feedback is shown on chat deletion failures in sidebar; mutation currently handles state refresh only on success.
+
+## 2026-02-15 - Sidebar Shell Rework Follow-up (alignment pass)
+
+### What changed
+
+- Moved sidebar collapse/expand control into the sidebar itself as the first (top-most) button:
+  - Updated `components/app-sidebar.tsx` to add a top button using `toggleSidebar`.
+  - Removed sidebar toggle from `components/chat-header.tsx`.
+- Fixed collapsed icon horizontal alignment:
+  - Updated `components/ui/sidebar.tsx` menu button variants with collapsed-state centering (`justify-center` + `gap-0`).
+- Fixed chat pane centering issue by removing unintended horizontal flex behavior in chat content wrapper:
+  - Updated `app/(chat)/layout.tsx` wrapper from `flex` row to block container.
+
+### What was validated
+
+- `pnpm lint` passes.
+- `pnpm build` passes.
+
+### Open risks / follow-ups
+
+- Mobile opening affordance now depends on current sidebar composition and should be visually checked on small screens after this pass.
+
+### Follow-up adjustment
+
+- Restored mobile sidebar accessibility by adding a mobile-only `SidebarTrigger` in `app/(chat)/layout.tsx` outside the header (fixed-position), so the sidebar can still open when closed on small screens.
+
+## 2026-02-15 - Sidebar Header Alignment Refinement
+
+### What changed
+
+- Updated sidebar top controls to match requested collapsed/expanded behavior:
+  - `components/app-sidebar.tsx`
+  - Added top header row (`h-14`) aligned with main header height.
+  - In expanded state: placeholder logo is left-aligned and collapse button is icon-only right-aligned.
+  - In collapsed state: top icon button is centered and remains the top-most control.
+  - Moved New Chat into its own row as a full-width, left-aligned button.
+- Matched header control sizing for consistency:
+  - `components/chat-header.tsx`
+  - Logout button now uses default size to align better with theme toggle and sidebar toggle sizing.
+
+### What was validated
+
+- `pnpm build` passes.
+- `pnpm lint` passes (after build).
+
+### Notes
+
+- Running lint and build in parallel caused a transient `.next/types` race (`Cannot find module './routes.js'`) in lint; rerunning lint after build resolved it.
+
+### New chat transition stabilization
+
+- Updated `components/app-sidebar.tsx` new-chat row to use separate fixed variants for collapsed and expanded states.
+- Added delayed opacity transition for expanded variant so text button appears after sidebar width expansion begins, preventing icon/text shift.
+- Kept collapsed variant as icon-only centered button.
+
+### Validation
+
+- `pnpm build` passes.
+- `pnpm lint` passes.
+
+### New chat morph fix (final)
+
+- Replaced dual collapsed/expanded New Chat button approach in `components/app-sidebar.tsx`.
+- New Chat now exists only in expanded header row (`group-data-[collapsible=icon]:hidden`) to avoid hidden collapsed layout space.
+- Added sidebar-state-aware delayed reveal (`showExpandedNewChat`) so New Chat appears after expand transition settles, removing icon/text morph during width animation.
+
+### Validation
+
+- `pnpm build` passes.
+- `pnpm lint` passes.
+
+### Collapsed New Chat icon restore
+
+- Added a collapsed-only New Chat row in `components/app-sidebar.tsx` with centered plus icon button.
+- Kept expanded New Chat row separate (`group-data-[collapsible=icon]:hidden`) to avoid cross-state spacing bleed and morphing.
+
+### Validation
+
+- `pnpm build` passes.
+- `pnpm lint` passes.

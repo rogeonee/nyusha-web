@@ -26,7 +26,7 @@ export default async function RegisterPage({
   const errorMessage = error ? registerErrorMessages[error] : undefined;
 
   return (
-    <div className="flex min-h-[calc(100dvh-4rem)] w-full items-center justify-center px-4 py-8 md:py-12">
+    <div className="flex min-h-dvh w-full items-center justify-center px-4 py-8 md:py-12">
       <Card className="w-full max-w-md p-6">
         <h1 className="mb-2 text-xl font-semibold">
           Регистрация в Nyusha Chat
