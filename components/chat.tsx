@@ -9,29 +9,53 @@ import { Button } from '@/components/ui/button';
 import { IconArrowUp } from '@/components/ui/icons';
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
+import { ChatModelSelector } from '@/components/chat-model-selector';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import {
+  DEFAULT_CHAT_MODEL,
+  resolveChatModelId,
+  type ChatModelId,
+} from '@/lib/ai/models';
 
 export default function Chat({
   id,
   initialMessages = [],
+  initialChatModel = DEFAULT_CHAT_MODEL,
 }: {
   id: string;
   initialMessages?: UIMessage[];
+  initialChatModel?: string;
 }) {
   const [input, setInput] = useState<string>('');
   const [showLongWaitNotice, setShowLongWaitNotice] = useState(false);
+  const [currentModelId, setCurrentModelId] = useState<ChatModelId>(
+    resolveChatModelId(initialChatModel),
+  );
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const currentModelIdRef = useRef<ChatModelId>(currentModelId);
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    currentModelIdRef.current = currentModelId;
+  }, [currentModelId]);
 
   const { messages, sendMessage, status } = useChat({
     id,
     messages: initialMessages,
     transport: new DefaultChatTransport({
       api: '/api/chat',
-      body: { id },
+      prepareSendMessagesRequest(request) {
+        return {
+          body: {
+            id: request.id,
+            messages: request.messages,
+            selectedChatModel: currentModelIdRef.current,
+          },
+        };
+      },
     }),
     onFinish: () => {
       if (pathname === '/') {
@@ -88,10 +112,7 @@ export default function Chat({
       <ChatHeader />
 
       <div className="relative flex-1">
-        <div
-          ref={scrollRef}
-          className="absolute inset-0 overflow-y-auto"
-        >
+        <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 sm:px-4">
             {messages.length <= 0 ? (
               <div className="mx-auto mt-10 w-full max-w-xl">
@@ -134,7 +155,13 @@ export default function Chat({
       <div className="sticky bottom-0 bg-background px-2 pb-4 sm:px-4">
         <div className="mx-auto w-full max-w-3xl">
           <Card className="p-2">
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} className="space-y-1.5">
+              <div className="px-1">
+                <ChatModelSelector
+                  selectedModelId={currentModelId}
+                  onModelChange={setCurrentModelId}
+                />
+              </div>
               <div className="flex">
                 <Input
                   type="text"

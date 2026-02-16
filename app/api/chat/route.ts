@@ -1,12 +1,12 @@
-import { google } from '@ai-sdk/google';
 import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   streamText,
-  type LanguageModel,
   type UIMessage,
 } from 'ai';
+import { getChatModelById } from '@/lib/ai/models';
+import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
   createChat,
@@ -14,8 +14,21 @@ import {
   getChatById,
   saveMessages,
 } from '@/lib/db/queries';
+import { type PostRequestBody, postRequestBodySchema } from './schema';
 
 export const maxDuration = 90;
+
+function extractMessageText(message: UIMessage): string {
+  return message.parts
+    .map((part) => {
+      if (part.type === 'text') {
+        return part.text;
+      }
+
+      return '';
+    })
+    .join('');
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -24,20 +37,29 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id, messages }: { id: string; messages: UIMessage[] } =
-    await request.json();
+  let requestBody: PostRequestBody;
+
+  try {
+    requestBody = postRequestBodySchema.parse(await request.json());
+  } catch (_error) {
+    return Response.json({ error: 'Bad request' }, { status: 400 });
+  }
+
+  const { id, selectedChatModel } = requestBody;
+  const messages = requestBody.messages as UIMessage[];
+  const chatModel = getChatModelById(selectedChatModel);
 
   // Ensure chat exists — create on first message
   const existingChat = await getChatById(id);
 
+  if (existingChat && existingChat.userId !== user.id) {
+    return Response.json({ error: 'Not found' }, { status: 404 });
+  }
+
   if (!existingChat) {
     const firstUserMessage = messages.find((m) => m.role === 'user');
     const title = firstUserMessage
-      ? firstUserMessage.parts
-          .filter((p) => p.type === 'text')
-          .map((p) => p.text)
-          .join('')
-          .slice(0, 100) || 'New Chat'
+      ? extractMessageText(firstUserMessage).slice(0, 100) || 'New Chat'
       : 'New Chat';
 
     await createChat({ id, userId: user.id, title });
@@ -59,14 +81,13 @@ export async function POST(request: Request) {
     ]);
   }
 
-  const model = google('gemini-2.5-flash') as unknown as LanguageModel;
+  const model = getLanguageModel(chatModel.id);
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       const result = streamText({
         model,
-        system:
-          'Ты Gemini 2.5 Flash, ассистент готовый помочь с ежедневными вопросами и задачами.',
+        system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
         messages: await convertToModelMessages(messages),
       });
 
