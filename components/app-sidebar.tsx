@@ -211,7 +211,8 @@ export default function AppSidebar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+              aria-label="Тема"
+              className="flex h-10 w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex size-8 shrink-0 items-center justify-center">
                 <ThemeIcon className="size-5 shrink-0" />
@@ -242,7 +243,8 @@ export default function AppSidebar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:justify-center"
+              aria-label="Меню аккаунта"
+              className="flex h-10 w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium">
                 {emailInitial}
