@@ -20,6 +20,7 @@ export default function Chat({
   initialMessages?: UIMessage[];
 }) {
   const [input, setInput] = useState<string>('');
+  const [showLongWaitNotice, setShowLongWaitNotice] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -39,6 +40,7 @@ export default function Chat({
       queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
   });
+  const isAwaitingResponse = status === 'submitted' || status === 'streaming';
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -48,6 +50,23 @@ export default function Chat({
       behavior: status === 'streaming' ? 'auto' : 'smooth',
     });
   }, [messages, status]);
+
+  useEffect(() => {
+    if (!isAwaitingResponse) {
+      setShowLongWaitNotice(false);
+      return;
+    }
+
+    setShowLongWaitNotice(false);
+
+    const longWaitTimer = window.setTimeout(() => {
+      setShowLongWaitNotice(true);
+    }, 30_000);
+
+    return () => {
+      window.clearTimeout(longWaitTimer);
+    };
+  }, [isAwaitingResponse]);
 
   const getMessageText = (message: UIMessage) =>
     message.parts
@@ -93,10 +112,16 @@ export default function Chat({
                     </div>
                   </div>
                 ))}
-                {status === 'submitted' || status === 'streaming' ? (
+                {isAwaitingResponse ? (
                   <div className="mb-5 flex whitespace-pre-wrap">
                     <div className="rounded-lg bg-transparent p-2 text-muted-foreground">
                       Думаю...
+                      {showLongWaitNotice ? (
+                        <div className="mt-2 text-xs leading-relaxed">
+                          Это может занять чуть больше времени. Все в порядке,
+                          запрос еще обрабатывается.
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

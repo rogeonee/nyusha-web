@@ -15,7 +15,7 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 
-export const maxDuration = 30;
+export const maxDuration = 90;
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
