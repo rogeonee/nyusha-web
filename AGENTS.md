@@ -1,12 +1,12 @@
 # AGENTS.md
 
-This file defines project-specific operating guidance for coding agents working in `/Users/rogeonee/Development/projects/nyusha-web`.
+This file defines operating guidance for non-Claude coding agents working in this repo. Claude agents: see `CLAUDE.md` instead (same rules, different format).
 
-## Source of Truth
+## First Steps
 
-1. Upgrade scope and sequence: `/Users/rogeonee/Development/projects/nyusha-web/UPGRADE_PLAN.md`
-2. Agent working notes (private, implementation scratchpad): `/Users/rogeonee/Development/projects/nyusha-web/notebook.md`
-3. Legacy reference implementation to borrow patterns from only: `/Users/rogeonee/Development/projects/nyusha-web/ai-chatbot`
+1. Read `UPGRADE_PLAN.md` for the phase plan and project scope.
+2. Read `notebook.md` — start with **Current State** for orientation, then check **Active Risks and Gotchas** before touching anything.
+3. The `ai-chatbot/` directory is a reference implementation only. Do not merge it into the main app.
 
 ## Hard Project Constraints
 
@@ -47,14 +47,27 @@ This file defines project-specific operating guidance for coding agents working 
 
 ## Practical Working Style
 
-1. Before major edits, capture assumptions and plan in `notebook.md`.
-2. After major edits, record:
+1. Keep diffs focused and avoid cross-cutting refactors not tied to current phase.
+2. Use `notebook.md` as described below.
 
-- what changed
-- what was validated
-- open risks or follow-ups
+## notebook.md Usage Rules
 
-3. Keep diffs focused and avoid cross-cutting refactors not tied to current phase.
+`notebook.md` is a shared scratchpad for agents — not a changelog. Keep it under ~80 lines.
+
+**Structure (maintain these sections):**
+
+1. **Current State** — Quick orientation: what's done, what's next, stack summary. Update this after every phase or major task completes.
+2. **Active Risks and Gotchas** — Non-obvious things that will bite the next agent. Remove entries once resolved.
+3. **Decisions Log** — Non-obvious technical choices and *why*. Remove entries once they're no longer relevant.
+
+**Rules:**
+
+- Do NOT record "what changed" file lists — git history covers that.
+- Do NOT create per-session or per-date entries — update the existing sections in place.
+- Do NOT duplicate information obvious from the code itself.
+- DO add a risk/gotcha when you hit something surprising that isn't visible in code.
+- DO add a decision entry when you choose between non-obvious alternatives.
+- DO prune aggressively: after a phase ships, collapse its details into the "Current State" one-liner and remove resolved risks.
 
 ## Quick Validation Checklist
 

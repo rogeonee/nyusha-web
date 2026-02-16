@@ -47,14 +47,27 @@ This file defines project-specific operating guidance for coding agents working 
 
 ## Practical Working Style
 
-1. Before major edits, capture assumptions and plan in `notebook.md`.
-2. After major edits, record:
+1. Keep diffs focused and avoid cross-cutting refactors not tied to current phase.
+2. Use `notebook.md` as described below.
 
-- what changed
-- what was validated
-- open risks or follow-ups
+## notebook.md Usage Rules
 
-3. Keep diffs focused and avoid cross-cutting refactors not tied to current phase.
+`notebook.md` is a shared scratchpad for agents — not a changelog. Keep it under ~80 lines.
+
+**Structure (maintain these sections):**
+
+1. **Current State** — Quick orientation: what's done, what's next, stack summary. Update this after every phase or major task completes.
+2. **Active Risks and Gotchas** — Non-obvious things that will bite the next agent. Remove entries once resolved.
+3. **Decisions Log** — Non-obvious technical choices and *why*. Remove entries once they're no longer relevant (e.g., the code is self-explanatory or the decision is superseded).
+
+**Rules:**
+
+- Do NOT record "what changed" file lists — git history covers that.
+- Do NOT create per-session or per-date entries — update the existing sections in place.
+- Do NOT duplicate information obvious from the code itself.
+- DO add a risk/gotcha when you hit something surprising that isn't visible in code.
+- DO add a decision entry when you choose between non-obvious alternatives.
+- DO prune aggressively: after a phase ships, collapse its details into the "Current State" one-liner and remove resolved risks.
 
 ## Quick Validation Checklist
 
