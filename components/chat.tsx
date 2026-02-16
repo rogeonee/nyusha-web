@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { IconArrowUp } from '@/components/ui/icons';
 import AboutCard from '@/components/cards/aboutcard';
+import { ChatHeader } from '@/components/chat-header';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -19,7 +20,7 @@ export default function Chat({
   initialMessages?: UIMessage[];
 }) {
   const [input, setInput] = useState<string>('');
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -40,8 +41,10 @@ export default function Chat({
   });
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      block: 'end',
+    const container = scrollRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
       behavior: status === 'streaming' ? 'auto' : 'smooth',
     });
   }, [messages, status]);
@@ -62,40 +65,49 @@ export default function Chat({
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
-      <div className="flex-1 overflow-y-auto px-2 sm:px-4">
-        {messages.length <= 0 ? (
-          <div className="mx-auto mt-10 w-full max-w-xl">
-            <AboutCard />
-          </div>
-        ) : (
-          <div className="mx-auto mt-10 w-full max-w-xl">
-            {messages.map((message, index) => (
-              <div key={index} className="mb-5 flex whitespace-pre-wrap">
-                <div
-                  className={`${
-                    message.role === 'user'
-                      ? 'bg-secondary ml-auto'
-                      : 'bg-transparent'
-                  } rounded-lg p-2`}
-                >
-                  {getMessageText(message)}
-                </div>
+    <div className="flex h-dvh min-w-0 flex-col bg-background">
+      <ChatHeader />
+
+      <div className="relative flex-1">
+        <div
+          ref={scrollRef}
+          className="absolute inset-0 overflow-y-auto"
+        >
+          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 sm:px-4">
+            {messages.length <= 0 ? (
+              <div className="mx-auto mt-10 w-full max-w-xl">
+                <AboutCard />
               </div>
-            ))}
-            {status === 'submitted' || status === 'streaming' ? (
-              <div className="mb-5 flex whitespace-pre-wrap">
-                <div className="rounded-lg bg-transparent p-2 text-muted-foreground">
-                  Думаю...
-                </div>
+            ) : (
+              <div className="mx-auto mt-10 w-full max-w-xl">
+                {messages.map((message, index) => (
+                  <div key={index} className="mb-5 flex whitespace-pre-wrap">
+                    <div
+                      className={`${
+                        message.role === 'user'
+                          ? 'bg-secondary ml-auto'
+                          : 'bg-transparent'
+                      } rounded-lg p-2`}
+                    >
+                      {getMessageText(message)}
+                    </div>
+                  </div>
+                ))}
+                {status === 'submitted' || status === 'streaming' ? (
+                  <div className="mb-5 flex whitespace-pre-wrap">
+                    <div className="rounded-lg bg-transparent p-2 text-muted-foreground">
+                      Думаю...
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            <div ref={bottomRef} />
+            )}
           </div>
-        )}
+        </div>
       </div>
-      <div className="bg-background/95 px-2 pb-4 sm:px-4">
-        <div className="mx-auto w-full max-w-xl">
+
+      <div className="sticky bottom-0 bg-background px-2 pb-4 sm:px-4">
+        <div className="mx-auto w-full max-w-3xl">
           <Card className="p-2">
             <form onSubmit={handleSubmit}>
               <div className="flex">

@@ -1,31 +1,33 @@
-import Link from 'next/link';
-import { logoutAction } from '@/app/(auth)/actions';
-import { ModeToggle } from '@/components/mode-toggle';
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { PanelLeft, SquarePen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useSidebar } from '@/components/ui/sidebar';
 
-export default function ChatHeader() {
+export function ChatHeader() {
+  const router = useRouter();
+  const { toggleSidebar, open } = useSidebar();
+
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border/70 bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="hidden md:flex min-w-0 items-center gap-2 pl-1">
-        <Link
-          href="/"
-          rel="nofollow"
-          className="truncate font-semibold text-sm tracking-tight"
+    <header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-1.5 md:px-2">
+      <Button variant="outline" className="h-fit px-2" onClick={toggleSidebar}>
+        <PanelLeft className="size-4" />
+      </Button>
+
+      {!open && (
+        <Button
+          variant="outline"
+          className="h-fit px-2"
+          onClick={() => {
+            router.push('/');
+            router.refresh();
+          }}
         >
-          Nyusha Chat
-        </Link>
-      </div>
-
-      <div className="md:hidden min-w-0 pl-1" />
-
-      <div className="flex items-center gap-2">
-        <ModeToggle />
-        <form action={logoutAction}>
-          <Button type="submit" variant="outline">
-            Выйти
-          </Button>
-        </form>
-      </div>
+          <SquarePen className="size-4" />
+          <span className="md:sr-only">Новый чат</span>
+        </Button>
+      )}
     </header>
   );
 }

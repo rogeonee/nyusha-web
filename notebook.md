@@ -322,3 +322,66 @@ Working notebook for implementation notes, patterns, warnings, and intermediate 
 
 - `pnpm build` passes.
 - `pnpm lint` passes.
+
+## 2026-02-16 - Sidebar/Header overlap investigation (pre-edit)
+
+### Assumptions and plan
+
+- The header/sidebar overlap is caused by desktop sidebar offset classes not producing valid width CSS.
+- We should keep the current product-specific chat/sidebar logic and only patch layout primitives.
+- Plan:
+  1. Fix invalid sidebar variable class syntax in `components/ui/sidebar.tsx` (`[--var]` to `[var(--var)]`).
+  2. Re-run typecheck (`pnpm lint`) to ensure no regressions.
+  3. Record validation and residual risks in this notebook entry.
+
+### What changed
+
+- Updated `components/ui/sidebar.tsx` variable-based size utilities to valid CSS variable forms:
+  - `w-[--sidebar-width]` -> `w-[var(--sidebar-width)]`
+  - `group-data-[collapsible=icon]:w-[--sidebar-width-icon]` -> `group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]`
+  - `max-w-[--skeleton-width]` -> `max-w-[var(--skeleton-width)]`
+- No behavioral changes were made to chat/auth/provider logic; only sidebar layout primitive sizing classes were adjusted.
+
+### What was validated
+
+- `pnpm lint` passes (`tsc --noEmit`).
+
+### Open risks / follow-ups
+
+- Visual verification in browser is still required to confirm the header/sidebar overlap is fully resolved across desktop collapsed/expanded states.
+- Current sidebar/chat implementation intentionally differs from template in data fetching/state stack (React Query vs SWR) and feature set; this patch only corrects layout parity for width/offset behavior.
+
+### Validation update
+
+- `pnpm build` passes (Next.js production build).
+
+## 2026-02-16 - Hydration mismatch fix (pre-edit)
+
+### Assumptions and plan
+
+- Sidebar hydration mismatch is from two client components producing non-deterministic SSR output:
+  1. `Math.random()` in `SidebarMenuSkeleton` width generation.
+  2. Theme-dependent icon/label in `AppSidebar` before mount.
+- Plan:
+  1. Remove random skeleton width generation and use deterministic widths.
+  2. Gate theme presentation behind mounted state with a stable SSR fallback.
+  3. Validate with `pnpm lint` and `pnpm build`.
+
+### What changed
+
+- Fixed non-deterministic sidebar loading skeleton rendering in `components/ui/sidebar.tsx`:
+  - Removed `Math.random()` width generation in `SidebarMenuSkeleton`.
+  - Added a deterministic `width` prop with default `'70%'`.
+- Fixed theme-toggle hydration mismatch in `components/app-sidebar.tsx`:
+  - Added `mounted` state (`useEffect`) and `effectiveTheme` fallback to `'system'` before mount.
+  - Theme icon/label now render stable SSR markup and update after mount.
+- Made loading skeleton widths deterministic in `components/app-sidebar.tsx` using a fixed width list.
+
+### What was validated
+
+- `pnpm lint` passes (`tsc --noEmit`).
+- `pnpm build` passes (Next.js production build).
+
+### Open risks / follow-ups
+
+- If additional hydration warnings appear, they are likely from other UI pieces that use non-deterministic client values during SSR and should be patched with the same deterministic-first-render pattern.

@@ -1,18 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { MessageSquare, PanelLeft, Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useTheme } from 'next-themes';
+import {
+  LogOut,
+  Monitor,
+  Moon,
+  MoreHorizontal,
+  Sun,
+  Trash2,
+} from 'lucide-react';
+import { logoutAction } from '@/app/(auth)/actions';
 import type { Chat } from '@/lib/db/schema';
+import { groupChatsByDate } from '@/lib/utils/chat-grouping';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
@@ -20,6 +34,9 @@ import {
   SidebarMenuSkeleton,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useEffect, useState } from 'react';
+
+const LOADING_SKELETON_WIDTHS = ['82%', '67%', '75%', '59%'] as const;
 
 async function fetchChats() {
   const response = await fetch('/api/history');
@@ -43,31 +60,21 @@ async function deleteChat(chatId: string) {
   return chatId;
 }
 
-export default function AppSidebar() {
+export default function AppSidebar({
+  user,
+}: {
+  user: { id: string; email: string };
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { setOpenMobile, toggleSidebar, open, isMobile } = useSidebar();
-  const [showExpandedNewChat, setShowExpandedNewChat] = useState(
-    open || isMobile,
-  );
+  const { setOpenMobile } = useSidebar();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (isMobile) {
-      setShowExpandedNewChat(true);
-      return;
-    }
-
-    if (open) {
-      const timeoutId = window.setTimeout(() => {
-        setShowExpandedNewChat(true);
-      }, 180);
-
-      return () => window.clearTimeout(timeoutId);
-    }
-
-    setShowExpandedNewChat(false);
-  }, [open, isMobile]);
+    setMounted(true);
+  }, []);
 
   const {
     data: chats = [],
@@ -93,11 +100,6 @@ export default function AppSidebar() {
     ? pathname.replace('/chat/', '').split('/')[0]
     : null;
 
-  const handleNewChat = () => {
-    router.push('/');
-    setOpenMobile(false);
-  };
-
   const handleOpenChat = (chatId: string) => {
     router.push(`/chat/${chatId}`);
     setOpenMobile(false);
@@ -107,117 +109,164 @@ export default function AppSidebar() {
     deleteMutation.mutate(chatId);
   };
 
+  const groupedChats = groupChatsByDate(chats);
+  const emailInitial = user.email.charAt(0).toUpperCase();
+  const effectiveTheme = mounted ? (theme ?? 'system') : 'system';
+  const ThemeIcon =
+    effectiveTheme === 'dark'
+      ? Moon
+      : effectiveTheme === 'system'
+        ? Monitor
+        : Sun;
+  const themeLabel =
+    effectiveTheme === 'dark'
+      ? 'Тёмная'
+      : effectiveTheme === 'system'
+        ? 'Системная'
+        : 'Светлая';
+
   return (
-    <Sidebar
-      collapsible="icon"
-      className="border-r border-sidebar-border bg-sidebar"
-    >
-      <SidebarHeader className="p-0 gap-0">
-        <div className="flex h-14 items-center justify-between border-b border-sidebar-border/70 px-2 group-data-[collapsible=icon]:justify-center">
-          <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-            <div className="flex size-8 items-center justify-center rounded-md border border-sidebar-border/80 bg-sidebar-accent/30 font-semibold text-[11px]">
-              N
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-10 border-sidebar-border bg-sidebar hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            aria-label="Свернуть/развернуть сайдбар"
-            onClick={toggleSidebar}
-          >
-            <PanelLeft className="size-4" />
-          </Button>
-        </div>
-
-        <div className="hidden px-2 py-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-10 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            aria-label="Новый чат"
-            onClick={handleNewChat}
-          >
-            <Plus className="size-4" />
-          </Button>
-        </div>
-
-        <div className="px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <div
-            className={
-              showExpandedNewChat
-                ? 'opacity-100'
-                : 'pointer-events-none opacity-0'
-            }
-          >
-            <Button
-              variant="ghost"
-              className="h-10 w-full justify-start gap-2 overflow-hidden whitespace-nowrap px-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={handleNewChat}
-            >
-              <Plus className="size-4 shrink-0" />
-              <span className="truncate">Новый чат</span>
-            </Button>
-          </div>
-        </div>
-      </SidebarHeader>
-
+    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0 bg-sidebar">
+      {/* Content */}
       <SidebarContent>
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-          <SidebarGroupLabel>Чаты</SidebarGroupLabel>
-          <SidebarGroupContent>
-            {isLoading ? (
-              <SidebarMenu>
-                {[1, 2, 3, 4].map((index) => (
-                  <SidebarMenuItem key={index}>
-                    <SidebarMenuSkeleton showIcon />
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            ) : isError ? (
-              <p className="px-2 py-2 text-sidebar-foreground/70 text-xs">
-                Не удалось загрузить чаты.
-              </p>
-            ) : chats.length === 0 ? (
-              <p className="px-2 py-2 text-sidebar-foreground/70 text-xs">
-                Нет чатов
-              </p>
-            ) : (
-              <SidebarMenu>
-                {chats.map((chat) => {
-                  const isDeleting =
-                    deleteMutation.isPending &&
-                    deleteMutation.variables === chat.id;
-
-                  return (
-                    <SidebarMenuItem key={chat.id}>
-                      <SidebarMenuButton
-                        isActive={activeChatId === chat.id}
-                        onClick={() => handleOpenChat(chat.id)}
-                      >
-                        <MessageSquare className="size-4" />
-                        <span>{chat.title}</span>
-                      </SidebarMenuButton>
-                      <SidebarMenuAction
-                        showOnHover
-                        aria-label="Удалить чат"
-                        disabled={isDeleting}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleDeleteChat(chat.id);
-                        }}
-                        className="hover:bg-destructive/15 hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </SidebarMenuAction>
+        {/* Expanded: grouped chat list — fades on collapse */}
+        <div className="transition-opacity duration-200 group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:opacity-0">
+          {isLoading ? (
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {LOADING_SKELETON_WIDTHS.map((width, index) => (
+                    <SidebarMenuItem key={index}>
+                      <SidebarMenuSkeleton width={width} />
                     </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            )}
-          </SidebarGroupContent>
-        </SidebarGroup>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : isError ? (
+            <p className="px-4 py-2 text-sidebar-foreground/50 text-xs">
+              Не удалось загрузить чаты.
+            </p>
+          ) : chats.length === 0 ? (
+            <p className="px-4 py-2 text-sidebar-foreground/50 text-xs">
+              Нет чатов
+            </p>
+          ) : (
+            groupedChats.map((group) => (
+              <SidebarGroup key={group.label}>
+                <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs font-medium px-2">
+                  {group.label}
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {group.chats.map((chat) => {
+                      const isDeleting =
+                        deleteMutation.isPending &&
+                        deleteMutation.variables === chat.id;
+
+                      return (
+                        <SidebarMenuItem key={chat.id}>
+                          <SidebarMenuButton
+                            isActive={activeChatId === chat.id}
+                            onClick={() => handleOpenChat(chat.id)}
+                            className="truncate"
+                          >
+                            <span className="truncate">{chat.title}</span>
+                          </SidebarMenuButton>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <SidebarMenuAction
+                                showOnHover
+                                aria-label="Действия с чатом"
+                              >
+                                <MoreHorizontal className="size-4" />
+                              </SidebarMenuAction>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="right" align="start">
+                              <DropdownMenuItem
+                                disabled={isDeleting}
+                                onClick={() => handleDeleteChat(chat.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="size-4" />
+                                <span>Удалить</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))
+          )}
+        </div>
       </SidebarContent>
+
+      {/* Footer */}
+      <SidebarFooter className="gap-1">
+        {/* Theme toggle */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center">
+                <ThemeIcon className="size-5 shrink-0" />
+              </span>
+              <span className="truncate text-sm transition-opacity duration-200 group-data-[collapsible=icon]:hidden">
+                {themeLabel}
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-48">
+            <DropdownMenuItem onClick={() => setTheme('light')}>
+              <Sun className="size-4" />
+              <span>Светлая</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('dark')}>
+              <Moon className="size-4" />
+              <span>Тёмная</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('system')}>
+              <Monitor className="size-4" />
+              <span>Системная</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* User / Logout */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-0 py-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:justify-center"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium">
+                {emailInitial}
+              </span>
+              <span className="truncate text-sm transition-opacity duration-200 group-data-[collapsible=icon]:hidden">
+                {user.email}
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-56">
+            <DropdownMenuItem asChild>
+              <form action={logoutAction} className="w-full">
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2"
+                >
+                  <LogOut className="size-4" />
+                  <span>Выйти</span>
+                </button>
+              </form>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -31,9 +31,5 @@ export default async function ChatPage({
     createdAt: m.createdAt,
   }));
 
-  return (
-    <div className="relative flex h-full flex-col p-4 sm:p-0">
-      <Chat id={id} initialMessages={initialMessages} />
-    </div>
-  );
+  return <Chat id={id} initialMessages={initialMessages} />;
 }
