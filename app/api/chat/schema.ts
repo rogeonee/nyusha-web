@@ -15,7 +15,7 @@ const messageSchema = z.object({
 export const postRequestBodySchema = z.object({
   id: z.uuid(),
   messages: z.array(messageSchema).min(1),
-  selectedChatModel: z.string().optional(),
+  selectedChatModel: z.string(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

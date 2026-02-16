@@ -14,6 +14,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_CHAT_MODEL,
+  getChatModelById,
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
@@ -65,6 +66,15 @@ export default function Chat({
     },
   });
   const isAwaitingResponse = status === 'submitted' || status === 'streaming';
+
+  const lastAssistantMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === 'assistant');
+  const assistantHasText =
+    lastAssistantMessage?.parts.some(
+      (p) => p.type === 'text' && p.text.length > 0,
+    ) ?? false;
+  const isThinking = isAwaitingResponse && !assistantHasText;
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -133,10 +143,10 @@ export default function Chat({
                     </div>
                   </div>
                 ))}
-                {isAwaitingResponse ? (
+                {isThinking ? (
                   <div className="mb-5 flex whitespace-pre-wrap">
                     <div className="rounded-lg bg-transparent p-2 text-muted-foreground">
-                      Думаю...
+                      {getChatModelById(currentModelId).name} думает...
                       {showLongWaitNotice ? (
                         <div className="mt-2 text-xs leading-relaxed">
                           Это может занять чуть больше времени. Все в порядке,

@@ -12,8 +12,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -43,13 +41,11 @@ export function ChatModelSelector({
           size="sm"
           className="h-8 max-w-[230px] justify-between px-2 text-xs sm:text-sm"
         >
-          <span className="truncate">{selectedModel.name}</span>
+          <span className="truncate">{selectedModel.shortName}</span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuLabel>Gemini Models</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         {chatModels.map((model) => (
           <DropdownMenuItem
             key={model.id}

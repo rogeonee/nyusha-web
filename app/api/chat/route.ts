@@ -5,7 +5,7 @@ import {
   streamText,
   type UIMessage,
 } from 'ai';
-import { getChatModelById } from '@/lib/ai/models';
+import { getChatModelById, isChatModelId } from '@/lib/ai/models';
 import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
@@ -46,6 +46,14 @@ export async function POST(request: Request) {
   }
 
   const { id, selectedChatModel } = requestBody;
+
+  if (!isChatModelId(selectedChatModel)) {
+    return Response.json(
+      { error: `Unknown model: ${selectedChatModel}` },
+      { status: 400 },
+    );
+  }
+
   const messages = requestBody.messages as UIMessage[];
   const chatModel = getChatModelById(selectedChatModel);
 
@@ -85,13 +93,21 @@ export async function POST(request: Request) {
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      const result = streamText({
-        model,
-        system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
-        messages: await convertToModelMessages(messages),
-      });
+      try {
+        const result = streamText({
+          model,
+          system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
+          messages: await convertToModelMessages(messages),
+        });
 
-      writer.merge(result.toUIMessageStream());
+        writer.merge(result.toUIMessageStream());
+      } catch (error) {
+        console.error(`Stream error for model ${chatModel.id}:`, error);
+        writer.write({
+          type: 'error',
+          errorText: `Модель ${chatModel.name} сейчас недоступна. Попробуйте выбрать другую модель.`,
+        });
+      }
     },
     onFinish: async ({ responseMessage }) => {
       await saveMessages([
