@@ -1,8 +1,8 @@
 import 'server-only';
 
-import { and, eq, gt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
-import { sessions, users } from '@/lib/db/schema';
+import { chats, messages, sessions, users } from '@/lib/db/schema';
 
 export async function getUserByEmail(email: string) {
   const db = getDb();
@@ -84,4 +84,58 @@ export async function getSessionWithUser(sessionId: string) {
 export async function deleteSession(sessionId: string) {
   const db = getDb();
   await db.delete(sessions).where(eq(sessions.id, sessionId));
+}
+
+export async function createChat({
+  id,
+  userId,
+  title,
+}: {
+  id: string;
+  userId: string;
+  title: string;
+}) {
+  const db = getDb();
+  const [chat] = await db
+    .insert(chats)
+    .values({ id, userId, title })
+    .returning();
+  return chat;
+}
+
+export async function getChatById(chatId: string) {
+  const db = getDb();
+  const [chat] = await db.select().from(chats).where(eq(chats.id, chatId));
+  return chat ?? null;
+}
+
+export async function getChatsByUserId(userId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(chats)
+    .where(eq(chats.userId, userId))
+    .orderBy(desc(chats.createdAt));
+}
+
+export async function deleteChatById(chatId: string) {
+  const db = getDb();
+  await db.delete(chats).where(eq(chats.id, chatId));
+}
+
+export async function saveMessages(
+  msgs: { id: string; chatId: string; role: string; parts: unknown }[],
+) {
+  const db = getDb();
+  if (msgs.length === 0) return;
+  await db.insert(messages).values(msgs);
+}
+
+export async function getMessagesByChatId(chatId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.createdAt));
 }
