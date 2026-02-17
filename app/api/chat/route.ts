@@ -5,6 +5,7 @@ import {
   streamText,
   type UIMessage,
 } from 'ai';
+import { google } from '@ai-sdk/google';
 import {
   getChatModelById,
   getFallbackChatModelId,
@@ -121,6 +122,9 @@ export async function POST(request: Request) {
             model,
             system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
             messages: await convertToModelMessages(messages),
+            tools: {
+              google_search: google.tools.googleSearch({}),
+            },
             providerOptions: {
               google: { thinkingConfig: chatModel.thinkingConfig },
             },
