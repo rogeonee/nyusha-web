@@ -65,14 +65,14 @@ function ReasoningBlock({ text }: { text: string }) {
   if (!normalizedText) return null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="mb-2">
-      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-3">
+      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ChevronRight
           className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`}
         />
         Мысли модели
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1.5 space-y-2 text-xs leading-relaxed text-muted-foreground">
+      <CollapsibleContent className="mt-1.5 space-y-2 text-sm leading-relaxed text-muted-foreground">
         {hasStructuredChunks ? (
           chunks.map((chunk, i) => (
             <div key={i}>
@@ -244,7 +244,7 @@ export default function Chat({
                 })}
                 {isThinking ? (
                   <div className="mb-5 flex whitespace-pre-wrap">
-                    <div className="rounded-lg bg-transparent p-2 text-xs text-muted-foreground">
+                    <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
                       {normalizedStreamingReasoningText ? (
                         <Collapsible>
                           <CollapsibleTrigger className="flex items-center gap-1 hover:text-foreground transition-colors">

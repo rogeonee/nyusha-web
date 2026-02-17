@@ -12,7 +12,7 @@ export default function AboutCard() {
     <div className="max-w-xl mx-auto mt-10">
       <Card>
         <CardHeader>
-          <CardTitle>Nyusha Chat with Gemini Flash 2.5</CardTitle>
+          <CardTitle>Nyusha Chat with Gemini</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground/90 leading-normal prose">
           <p>Супер простой чат, собранный на коленке из того что было.</p>
