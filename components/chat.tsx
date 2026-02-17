@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { IconArrowUp } from '@/components/ui/icons';
 import { ChevronRight } from 'lucide-react';
+import { Streamdown } from 'streamdown';
+import { createMathPlugin } from '@streamdown/math';
+
+const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
 import { ChatModelSelector } from '@/components/chat-model-selector';
@@ -216,7 +220,7 @@ export default function Chat({
                 <AboutCard />
               </div>
             ) : (
-              <div className="mx-auto mt-10 w-full max-w-xl">
+              <div className="mt-10 w-full">
                 {messages.map((message, index) => {
                   const text = getMessageText(message);
 
@@ -228,16 +232,32 @@ export default function Chat({
                       : '';
 
                   return (
-                    <div key={index} className="mb-5 flex whitespace-pre-wrap">
+                    <div
+                      key={index}
+                      className={`mb-5 flex ${
+                        message.role === 'user'
+                          ? 'justify-end whitespace-pre-wrap'
+                          : ''
+                      }`}
+                    >
                       <div
                         className={`${
                           message.role === 'user'
-                            ? 'bg-secondary ml-auto'
-                            : 'bg-transparent'
+                            ? 'bg-secondary'
+                            : 'bg-transparent w-full'
                         } rounded-lg p-2`}
                       >
                         {reasoning ? <ReasoningBlock text={reasoning} /> : null}
-                        {text}
+                        {message.role === 'assistant' ? (
+                          <Streamdown
+                            className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                            plugins={{ math: mathPlugin }}
+                          >
+                            {text}
+                          </Streamdown>
+                        ) : (
+                          text
+                        )}
                       </div>
                     </div>
                   );
