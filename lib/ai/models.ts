@@ -17,7 +17,7 @@ export const chatModels = [
     provider: 'google',
     description: 'Latest Flash — fast, smart, and cost-effective',
     sdkModelId: 'gemini-3-flash-preview',
-    thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
+    thinkingConfig: { thinkingLevel: 'low', includeThoughts: true },
   },
   {
     id: 'google/gemini-2.5-flash',
