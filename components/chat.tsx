@@ -1,17 +1,19 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { IconArrowUp } from '@/components/ui/icons';
 import { ChevronRight } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
-
-const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
+import {
+  ReasoningBlock,
+  parseReasoningChunks,
+} from '@/components/reasoning-block';
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
 import { ChatModelSelector } from '@/components/chat-model-selector';
@@ -20,6 +22,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+
+const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -28,69 +32,6 @@ import {
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
-
-interface ReasoningChunk {
-  title: string;
-  body: string;
-}
-
-function parseReasoningChunks(text: string): ReasoningChunk[] {
-  const chunks: ReasoningChunk[] = [];
-  const regex = /\*\*(.+?)\*\*/g;
-  const titles: { title: string; index: number; length: number }[] = [];
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    titles.push({
-      title: match[1],
-      index: match.index,
-      length: match[0].length,
-    });
-  }
-
-  for (let i = 0; i < titles.length; i++) {
-    const start = titles[i].index + titles[i].length;
-    const end = i + 1 < titles.length ? titles[i + 1].index : text.length;
-    chunks.push({
-      title: titles[i].title,
-      body: text.slice(start, end).trim(),
-    });
-  }
-
-  return chunks;
-}
-
-function ReasoningBlock({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  const normalizedText = text.trim();
-  const chunks = parseReasoningChunks(normalizedText);
-  const hasStructuredChunks = chunks.length > 0;
-
-  if (!normalizedText) return null;
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="mb-3">
-      <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ChevronRight
-          className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-        Мысли модели
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1.5 space-y-2 text-sm leading-relaxed text-muted-foreground">
-        {hasStructuredChunks ? (
-          chunks.map((chunk, i) => (
-            <div key={i}>
-              <div className="font-medium">{chunk.title}</div>
-              {chunk.body ? <div className="mt-0.5">{chunk.body}</div> : null}
-            </div>
-          ))
-        ) : (
-          <div className="whitespace-pre-wrap">{normalizedText}</div>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
 
 export default function Chat({
   id,
@@ -107,6 +48,7 @@ export default function Chat({
     resolveChatModelId(initialChatModel),
   );
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
   const router = useRouter();
   const pathname = usePathname();
@@ -199,13 +141,30 @@ export default function Chat({
     ? streamingChunks[streamingChunks.length - 1].title
     : 'Мысли модели';
 
+  const resizeTextarea = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const prompt = input.trim();
     if (!prompt) return;
 
     setInput('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     void sendMessage({ text: prompt });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSubmit(e);
+    }
   };
 
   return (
@@ -320,17 +279,20 @@ export default function Chat({
                   onModelChange={setCurrentModelId}
                 />
               </div>
-              <div className="flex">
-                <Input
-                  type="text"
+              <div className="flex items-end">
+                <Textarea
+                  ref={textareaRef}
                   value={input}
                   onChange={(event) => {
                     setInput(event.target.value);
+                    resizeTextarea();
                   }}
-                  className="mr-2 h-10 w-[95%] border-0 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  className="mr-2 max-h-[200px] min-h-10 w-[95%] resize-none border-0 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   placeholder="Спроси что-нибудь..."
                 />
-                <Button disabled={!input.trim()}>
+                <Button disabled={!input.trim()} className="mb-0.5">
                   <IconArrowUp />
                 </Button>
               </div>
