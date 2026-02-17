@@ -12,13 +12,11 @@ Modernize the existing minimal chatbot app in-place (do not replace with templat
 4. Model setup:
 
 - Google models use direct BYOK (`GOOGLE_GENERATIVE_AI_API_KEY`) to spend GCP credits.
-- Non-Google models use Vercel AI Gateway (`AI_GATEWAY_API_KEY` in local/dev, OIDC in Vercel prod).
+- Non-Google models via Vercel AI Gateway are deferred to a side track (not part of numbered phases).
 
 5. Primary model menu:
 
-- Gemini: `gemini-3-flash-preview` (fallback `gemini-2.5-flash` / `gemini-2.5-flash-lite`)
-- xAI: `xai/grok-4.1-fast-non-reasoning`
-- Moonshot: `moonshotai/kimi-k2`
+- Gemini: `gemini-3-flash-preview` (fallback `gemini-2.5-flash`)
 
 6. Deployment target: Vercel + managed Postgres.
 7. Keep scope lean: no artifact/doc editor tooling, no heavy enterprise features.
@@ -69,14 +67,10 @@ Deliverable: History survives reload and is user-scoped.
 
 1. Implement strict model registry (typed allowlist).
 2. Add per-chat model selection.
-3. Route provider by model:
-
-- Google provider for Gemini IDs.
-- AI Gateway provider for Grok/Kimi IDs.
-
+3. Route Gemini IDs via Google provider only (Gemini-only scope).
 4. Add safe fallback if a selected model is unavailable.
 
-Deliverable: Reliable multi-model support aligned with cost goals.
+Deliverable: Reliable Gemini model support aligned with cost goals.
 
 ## Phase 4 - Quality-of-Life Upgrades
 
@@ -96,6 +90,12 @@ Deliverable: Day-to-day usability on par with modern small-team chat apps.
 4. Share final family URL.
 
 Deliverable: Stable production deployment with clear operational setup.
+
+## Side Track - Non-Google Providers (Deferred)
+
+1. Re-introduce AI Gateway routing for non-Google models after Gemini credits/cost strategy changes.
+2. Add model allowlist entries for Grok/Kimi when side track is activated.
+3. Keep Gemini path unchanged while side track is deferred.
 
 ## Environment Variables
 

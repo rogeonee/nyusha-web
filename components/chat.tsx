@@ -58,9 +58,11 @@ function parseReasoningChunks(text: string): ReasoningChunk[] {
 
 function ReasoningBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const chunks = parseReasoningChunks(text);
+  const normalizedText = text.trim();
+  const chunks = parseReasoningChunks(normalizedText);
+  const hasStructuredChunks = chunks.length > 0;
 
-  if (chunks.length === 0) return null;
+  if (!normalizedText) return null;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-2">
@@ -71,12 +73,16 @@ function ReasoningBlock({ text }: { text: string }) {
         Мысли модели
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1.5 space-y-2 text-xs leading-relaxed text-muted-foreground">
-        {chunks.map((chunk, i) => (
-          <div key={i}>
-            <div className="font-medium">{chunk.title}</div>
-            {chunk.body ? <div className="mt-0.5">{chunk.body}</div> : null}
-          </div>
-        ))}
+        {hasStructuredChunks ? (
+          chunks.map((chunk, i) => (
+            <div key={i}>
+              <div className="font-medium">{chunk.title}</div>
+              {chunk.body ? <div className="mt-0.5">{chunk.body}</div> : null}
+            </div>
+          ))
+        ) : (
+          <div className="whitespace-pre-wrap">{normalizedText}</div>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -180,11 +186,14 @@ export default function Chat({
   const streamingReasoningText = lastAssistantMessage
     ? getReasoningText(lastAssistantMessage)
     : '';
-  const streamingChunks = parseReasoningChunks(streamingReasoningText);
-  const latestChunkTitle =
-    streamingChunks.length > 0
-      ? streamingChunks[streamingChunks.length - 1].title
-      : undefined;
+  const normalizedStreamingReasoningText = streamingReasoningText.trim();
+  const streamingChunks = parseReasoningChunks(
+    normalizedStreamingReasoningText,
+  );
+  const hasStructuredStreamingChunks = streamingChunks.length > 0;
+  const latestChunkTitle = hasStructuredStreamingChunks
+    ? streamingChunks[streamingChunks.length - 1].title
+    : 'Мысли модели';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -236,21 +245,29 @@ export default function Chat({
                 {isThinking ? (
                   <div className="mb-5 flex whitespace-pre-wrap">
                     <div className="rounded-lg bg-transparent p-2 text-xs text-muted-foreground">
-                      {streamingChunks.length > 0 ? (
+                      {normalizedStreamingReasoningText ? (
                         <Collapsible>
                           <CollapsibleTrigger className="flex items-center gap-1 hover:text-foreground transition-colors">
                             <ChevronRight className="size-3" />
                             {latestChunkTitle}
                           </CollapsibleTrigger>
                           <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
-                            {streamingChunks.map((chunk, i) => (
-                              <div key={i}>
-                                <div className="font-medium">{chunk.title}</div>
-                                {chunk.body ? (
-                                  <div className="mt-0.5">{chunk.body}</div>
-                                ) : null}
+                            {hasStructuredStreamingChunks ? (
+                              streamingChunks.map((chunk, i) => (
+                                <div key={i}>
+                                  <div className="font-medium">
+                                    {chunk.title}
+                                  </div>
+                                  {chunk.body ? (
+                                    <div className="mt-0.5">{chunk.body}</div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="whitespace-pre-wrap">
+                                {normalizedStreamingReasoningText}
                               </div>
-                            ))}
+                            )}
                           </CollapsibleContent>
                         </Collapsible>
                       ) : (

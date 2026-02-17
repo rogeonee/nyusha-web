@@ -34,6 +34,10 @@ export type ChatModel = (typeof chatModels)[number];
 export type ChatModelId = ChatModel['id'];
 
 export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-2.5-flash';
+const PREVIEW_MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
+  'google/gemini-3-pro-preview': DEFAULT_CHAT_MODEL,
+  'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
+};
 
 const chatModelById = new Map<ChatModelId, ChatModel>(
   chatModels.map((model) => [model.id, model]),
@@ -62,4 +66,10 @@ export function resolveChatModelId(value?: string | null): ChatModelId {
 
 export function getChatModelById(value?: string | null): ChatModel {
   return chatModelById.get(resolveChatModelId(value)) ?? chatModels[0];
+}
+
+export function getFallbackChatModelId(
+  modelId: ChatModelId,
+): ChatModelId | null {
+  return PREVIEW_MODEL_FALLBACKS[modelId] ?? null;
 }

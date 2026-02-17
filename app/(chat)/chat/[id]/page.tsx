@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
-import { CHAT_MODEL_COOKIE_NAME, resolveChatModelId } from '@/lib/ai/models';
+import { resolveChatModelId } from '@/lib/ai/models';
 import Chat from '@/components/chat';
 import type { UIMessage } from 'ai';
 
@@ -25,10 +24,7 @@ export default async function ChatPage({
   }
 
   const dbMessages = await getMessagesByChatId(id);
-  const cookieStore = await cookies();
-  const initialChatModel = resolveChatModelId(
-    cookieStore.get(CHAT_MODEL_COOKIE_NAME)?.value,
-  );
+  const initialChatModel = resolveChatModelId(chat.modelId);
 
   const initialMessages: UIMessage[] = dbMessages.map((m) => ({
     id: m.id,

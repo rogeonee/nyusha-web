@@ -1,0 +1,1 @@
+ALTER TABLE "chats" ADD COLUMN "model_id" varchar(100) DEFAULT 'google/gemini-2.5-flash' NOT NULL;

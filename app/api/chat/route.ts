@@ -5,7 +5,13 @@ import {
   streamText,
   type UIMessage,
 } from 'ai';
-import { getChatModelById, isChatModelId } from '@/lib/ai/models';
+import {
+  getChatModelById,
+  getFallbackChatModelId,
+  isChatModelId,
+  resolveChatModelId,
+  type ChatModelId,
+} from '@/lib/ai/models';
 import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
@@ -13,6 +19,7 @@ import {
   deleteChatById,
   getChatById,
   saveMessages,
+  updateChatModelById,
 } from '@/lib/db/queries';
 import { type PostRequestBody, postRequestBodySchema } from './schema';
 
@@ -55,7 +62,7 @@ export async function POST(request: Request) {
   }
 
   const messages = requestBody.messages as UIMessage[];
-  const chatModel = getChatModelById(selectedChatModel);
+  const requestedModelId = selectedChatModel as ChatModelId;
 
   // Ensure chat exists — create on first message
   const existingChat = await getChatById(id);
@@ -70,7 +77,20 @@ export async function POST(request: Request) {
       ? extractMessageText(firstUserMessage).slice(0, 100) || 'New Chat'
       : 'New Chat';
 
-    await createChat({ id, userId: user.id, title });
+    await createChat({ id, userId: user.id, title, modelId: requestedModelId });
+  }
+
+  let activeModelId = requestedModelId;
+
+  if (existingChat) {
+    const storedModelId = resolveChatModelId(existingChat.modelId);
+
+    if (storedModelId !== requestedModelId) {
+      await updateChatModelById({ chatId: id, modelId: requestedModelId });
+      activeModelId = requestedModelId;
+    } else {
+      activeModelId = storedModelId;
+    }
   }
 
   // Save the latest user message
@@ -89,23 +109,54 @@ export async function POST(request: Request) {
     ]);
   }
 
-  const model = getLanguageModel(chatModel.id);
-
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      try {
-        const result = streamText({
-          model,
-          system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
-          messages: await convertToModelMessages(messages),
-          providerOptions: {
-            google: { thinkingConfig: chatModel.thinkingConfig },
-          },
-        });
+      const createResultForModel = async (modelId: ChatModelId) => {
+        const chatModel = getChatModelById(modelId);
+        const model = getLanguageModel(chatModel.id);
 
-        writer.merge(result.toUIMessageStream());
-      } catch (error) {
-        console.error(`Stream error for model ${chatModel.id}:`, error);
+        return {
+          chatModel,
+          result: streamText({
+            model,
+            system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
+            messages: await convertToModelMessages(messages),
+            providerOptions: {
+              google: { thinkingConfig: chatModel.thinkingConfig },
+            },
+          }),
+        };
+      };
+
+      try {
+        const primary = await createResultForModel(activeModelId);
+        writer.merge(primary.result.toUIMessageStream());
+      } catch (primaryError) {
+        const fallbackModelId = getFallbackChatModelId(activeModelId);
+
+        if (fallbackModelId && fallbackModelId !== activeModelId) {
+          try {
+            const fallback = await createResultForModel(fallbackModelId);
+            console.error(
+              `Primary model unavailable (${activeModelId}); falling back to ${fallbackModelId}:`,
+              primaryError,
+            );
+            writer.merge(fallback.result.toUIMessageStream());
+            return;
+          } catch (fallbackError) {
+            console.error(
+              `Fallback model unavailable (${fallbackModelId}) after primary failure (${activeModelId}):`,
+              fallbackError,
+            );
+          }
+        } else {
+          console.error(
+            `Stream error for model ${activeModelId}:`,
+            primaryError,
+          );
+        }
+
+        const chatModel = getChatModelById(activeModelId);
         writer.write({
           type: 'error',
           errorText: `Модель ${chatModel.name} сейчас недоступна. Попробуйте выбрать другую модель.`,
