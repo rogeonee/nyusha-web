@@ -1,21 +1,41 @@
-import { google } from '@ai-sdk/google';
 import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   streamText,
-  type LanguageModel,
   type UIMessage,
 } from 'ai';
+import {
+  getChatModelById,
+  getFallbackChatModelId,
+  isChatModelId,
+  resolveChatModelId,
+  type ChatModelId,
+} from '@/lib/ai/models';
+import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
   createChat,
   deleteChatById,
   getChatById,
   saveMessages,
+  updateChatModelById,
 } from '@/lib/db/queries';
+import { type PostRequestBody, postRequestBodySchema } from './schema';
 
 export const maxDuration = 90;
+
+function extractMessageText(message: UIMessage): string {
+  return message.parts
+    .map((part) => {
+      if (part.type === 'text') {
+        return part.text;
+      }
+
+      return '';
+    })
+    .join('');
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -24,23 +44,53 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id, messages }: { id: string; messages: UIMessage[] } =
-    await request.json();
+  let requestBody: PostRequestBody;
+
+  try {
+    requestBody = postRequestBodySchema.parse(await request.json());
+  } catch (_error) {
+    return Response.json({ error: 'Bad request' }, { status: 400 });
+  }
+
+  const { id, selectedChatModel } = requestBody;
+
+  if (!isChatModelId(selectedChatModel)) {
+    return Response.json(
+      { error: `Unknown model: ${selectedChatModel}` },
+      { status: 400 },
+    );
+  }
+
+  const messages = requestBody.messages as UIMessage[];
+  const requestedModelId = selectedChatModel as ChatModelId;
 
   // Ensure chat exists — create on first message
   const existingChat = await getChatById(id);
 
+  if (existingChat && existingChat.userId !== user.id) {
+    return Response.json({ error: 'Not found' }, { status: 404 });
+  }
+
   if (!existingChat) {
     const firstUserMessage = messages.find((m) => m.role === 'user');
     const title = firstUserMessage
-      ? firstUserMessage.parts
-          .filter((p) => p.type === 'text')
-          .map((p) => p.text)
-          .join('')
-          .slice(0, 100) || 'New Chat'
+      ? extractMessageText(firstUserMessage).slice(0, 100) || 'New Chat'
       : 'New Chat';
 
-    await createChat({ id, userId: user.id, title });
+    await createChat({ id, userId: user.id, title, modelId: requestedModelId });
+  }
+
+  let activeModelId = requestedModelId;
+
+  if (existingChat) {
+    const storedModelId = resolveChatModelId(existingChat.modelId);
+
+    if (storedModelId !== requestedModelId) {
+      await updateChatModelById({ chatId: id, modelId: requestedModelId });
+      activeModelId = requestedModelId;
+    } else {
+      activeModelId = storedModelId;
+    }
   }
 
   // Save the latest user message
@@ -59,18 +109,59 @@ export async function POST(request: Request) {
     ]);
   }
 
-  const model = google('gemini-2.5-flash') as unknown as LanguageModel;
-
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      const result = streamText({
-        model,
-        system:
-          'Ты Gemini 2.5 Flash, ассистент готовый помочь с ежедневными вопросами и задачами.',
-        messages: await convertToModelMessages(messages),
-      });
+      const createResultForModel = async (modelId: ChatModelId) => {
+        const chatModel = getChatModelById(modelId);
+        const model = getLanguageModel(chatModel.id);
 
-      writer.merge(result.toUIMessageStream());
+        return {
+          chatModel,
+          result: streamText({
+            model,
+            system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
+            messages: await convertToModelMessages(messages),
+            providerOptions: {
+              google: { thinkingConfig: chatModel.thinkingConfig },
+            },
+          }),
+        };
+      };
+
+      try {
+        const primary = await createResultForModel(activeModelId);
+        writer.merge(primary.result.toUIMessageStream());
+      } catch (primaryError) {
+        const fallbackModelId = getFallbackChatModelId(activeModelId);
+
+        if (fallbackModelId && fallbackModelId !== activeModelId) {
+          try {
+            const fallback = await createResultForModel(fallbackModelId);
+            console.error(
+              `Primary model unavailable (${activeModelId}); falling back to ${fallbackModelId}:`,
+              primaryError,
+            );
+            writer.merge(fallback.result.toUIMessageStream());
+            return;
+          } catch (fallbackError) {
+            console.error(
+              `Fallback model unavailable (${fallbackModelId}) after primary failure (${activeModelId}):`,
+              fallbackError,
+            );
+          }
+        } else {
+          console.error(
+            `Stream error for model ${activeModelId}:`,
+            primaryError,
+          );
+        }
+
+        const chatModel = getChatModelById(activeModelId);
+        writer.write({
+          type: 'error',
+          errorText: `Модель ${chatModel.name} сейчас недоступна. Попробуйте выбрать другую модель.`,
+        });
+      }
     },
     onFinish: async ({ responseMessage }) => {
       await saveMessages([

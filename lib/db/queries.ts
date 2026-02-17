@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { and, asc, desc, eq, gt } from 'drizzle-orm';
+import { DEFAULT_CHAT_MODEL, type ChatModelId } from '@/lib/ai/models';
 import { getDb } from '@/lib/db';
 import { chats, messages, sessions, users } from '@/lib/db/schema';
 
@@ -90,15 +91,17 @@ export async function createChat({
   id,
   userId,
   title,
+  modelId = DEFAULT_CHAT_MODEL,
 }: {
   id: string;
   userId: string;
   title: string;
+  modelId?: ChatModelId;
 }) {
   const db = getDb();
   const [chat] = await db
     .insert(chats)
-    .values({ id, userId, title })
+    .values({ id, userId, title, modelId })
     .returning();
   return chat;
 }
@@ -121,6 +124,23 @@ export async function getChatsByUserId(userId: string) {
 export async function deleteChatById(chatId: string) {
   const db = getDb();
   await db.delete(chats).where(eq(chats.id, chatId));
+}
+
+export async function updateChatModelById({
+  chatId,
+  modelId,
+}: {
+  chatId: string;
+  modelId: ChatModelId;
+}) {
+  const db = getDb();
+  const [chat] = await db
+    .update(chats)
+    .set({ modelId })
+    .where(eq(chats.id, chatId))
+    .returning();
+
+  return chat ?? null;
 }
 
 export async function saveMessages(

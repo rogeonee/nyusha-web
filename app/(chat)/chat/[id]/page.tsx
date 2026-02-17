@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
+import { resolveChatModelId } from '@/lib/ai/models';
 import Chat from '@/components/chat';
 import type { UIMessage } from 'ai';
 
@@ -23,6 +24,7 @@ export default async function ChatPage({
   }
 
   const dbMessages = await getMessagesByChatId(id);
+  const initialChatModel = resolveChatModelId(chat.modelId);
 
   const initialMessages: UIMessage[] = dbMessages.map((m) => ({
     id: m.id,
@@ -31,5 +33,11 @@ export default async function ChatPage({
     createdAt: m.createdAt,
   }));
 
-  return <Chat id={id} initialMessages={initialMessages} />;
+  return (
+    <Chat
+      id={id}
+      initialMessages={initialMessages}
+      initialChatModel={initialChatModel}
+    />
+  );
 }

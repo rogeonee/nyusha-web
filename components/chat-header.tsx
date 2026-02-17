@@ -7,7 +7,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 
 export function ChatHeader() {
   const router = useRouter();
-  const { toggleSidebar, open } = useSidebar();
+  const { toggleSidebar } = useSidebar();
 
   return (
     <header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-1.5 md:px-2">
@@ -15,19 +15,16 @@ export function ChatHeader() {
         <PanelLeft className="size-4" />
       </Button>
 
-      {!open && (
-        <Button
-          variant="outline"
-          className="h-fit px-2"
-          onClick={() => {
-            router.push('/');
-            router.refresh();
-          }}
-        >
-          <SquarePen className="size-4" />
-          <span className="md:sr-only">Новый чат</span>
-        </Button>
-      )}
+      <Button
+        variant="outline"
+        className="h-fit px-2"
+        onClick={() => {
+          router.push('/');
+          router.refresh();
+        }}
+      >
+        <SquarePen className="size-4" />
+      </Button>
     </header>
   );
 }
