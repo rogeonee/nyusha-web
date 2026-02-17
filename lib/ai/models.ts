@@ -8,6 +8,7 @@ export const chatModels = [
     provider: 'google',
     description: 'Most capable for complex questions and planning',
     sdkModelId: 'gemini-3-pro-preview',
+    thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
   },
   {
     id: 'google/gemini-3-flash-preview',
@@ -16,6 +17,7 @@ export const chatModels = [
     provider: 'google',
     description: 'Latest Flash — fast, smart, and cost-effective',
     sdkModelId: 'gemini-3-flash-preview',
+    thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
   },
   {
     id: 'google/gemini-2.5-flash',
@@ -24,6 +26,7 @@ export const chatModels = [
     provider: 'google',
     description: 'Proven and efficient for everyday chats',
     sdkModelId: 'gemini-2.5-flash',
+    thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
   },
 ] as const;
 

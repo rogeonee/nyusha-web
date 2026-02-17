@@ -9,7 +9,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
 - **Models:** Central registry in `lib/ai/models.ts` with Gemini-only options (3.0 Pro, 3.0 Flash, 2.5 Flash). Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
-- **Model UX:** Compact picker in composer shows `shortName` in trigger, full names in dropdown. Thinking indicator shows model name. Cookie-persisted.
+- **Model UX:** Compact picker in composer shows `shortName` in trigger, full names in dropdown. Thinking indicator shows streaming reasoning one-liner → collapsible "Мысли модели" on completed messages. Cookie-persisted.
+- **Reasoning:** Gemini thought summaries enabled via `includeThoughts: true` per model. 3.x models use `thinkingLevel: 'high'`, 2.5 Flash uses `thinkingBudget: -1` (dynamic). `sendReasoning` defaults to true in AI SDK.
 - **Auth:** Invite-only credentials auth, JWT cookie sessions, DB-backed session records. Gated by `FAMILY_ALLOWED_EMAILS`.
 - **DB schema:** `users`, `sessions`, `chats`, `messages`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone.
@@ -26,6 +27,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - `EnvCard` warning banner is no longer visible after global header removal; relocate if still needed.
 - No toast/feedback on chat deletion failures in sidebar.
 - `/api/chat` `maxDuration` is 90s. If timeouts still occur, increase further or reduce generation length.
+- Thinking tokens are billed even though only summaries are returned. If costs spike, lower `thinkingBudget`/`thinkingLevel` in `lib/ai/models.ts`.
 
 ## Decisions Log
 

@@ -98,6 +98,9 @@ export async function POST(request: Request) {
           model,
           system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
           messages: await convertToModelMessages(messages),
+          providerOptions: {
+            google: { thinkingConfig: chatModel.thinkingConfig },
+          },
         });
 
         writer.merge(result.toUIMessageStream());
