@@ -4,8 +4,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 
 ## Current State
 
-- **Completed:** Phase 0 (deps + streaming), Phase 1 (auth), Phase 2 (chat persistence), Phase 3 (Gemini-only model routing + selector), sidebar shell rework, chat timeout increase.
-- **Next phase:** Phase 4 — Quality-of-Life upgrades. Non-Google providers are deferred to a side track.
+- **Completed:** Phase 0–3 (streaming, auth, persistence, model routing). Phase 4 (QoL: edit/regenerate, rate limiting, offline/error states, stop button, latency display).
+- **Next phase:** None scheduled. Non-Google providers deferred to a side track.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
 - **Models:** Central registry in `lib/ai/models.ts` with Gemini-only options (3.0 Pro, 3.0 Flash, 2.5 Flash). Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
@@ -26,6 +26,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Chat title is set once from first user message and never updated.
 - `EnvCard` warning banner is no longer visible after global header removal; relocate if still needed.
 - No toast/feedback on chat deletion failures in sidebar.
+- `useChat` status values are `submitted | streaming | ready | error` (not `idle`); plan docs used wrong value.
+- `deleteMessagesFromId` deletes by `createdAt >=`, so two messages with identical timestamps could over-delete; extremely unlikely in practice.
 - `/api/chat` `maxDuration` is 90s. If timeouts still occur, increase further or reduce generation length.
 - Thinking tokens are billed even though only summaries are returned. If costs spike, lower `thinkingBudget`/`thinkingLevel` in `lib/ai/models.ts`.
 

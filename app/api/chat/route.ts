@@ -19,6 +19,7 @@ import {
   createChat,
   deleteChatById,
   getChatById,
+  getMessageCountByUserId,
   saveMessages,
   updateChatModelById,
 } from '@/lib/db/queries';
@@ -43,6 +44,15 @@ export async function POST(request: Request) {
 
   if (!user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const DAILY_MESSAGE_LIMIT = 200;
+  const messageCount = await getMessageCountByUserId(user.id, 24);
+  if (messageCount >= DAILY_MESSAGE_LIMIT) {
+    return Response.json(
+      { error: 'Вы достигли дневного лимита сообщений. Попробуйте завтра.' },
+      { status: 429 },
+    );
   }
 
   let requestBody: PostRequestBody;

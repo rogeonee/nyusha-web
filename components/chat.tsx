@@ -6,8 +6,8 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { IconArrowUp } from '@/components/ui/icons';
-import { ChevronRight } from 'lucide-react';
+import { IconArrowUp, IconStop } from '@/components/ui/icons';
+import { CheckIcon, ChevronRight, ClipboardIcon, PencilIcon, RotateCcwIcon } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import {
@@ -22,6 +22,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { MessageEditor } from '@/components/message-editor';
+import { deleteTrailingMessages } from '@/app/(chat)/actions';
 
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 import { useRouter, usePathname } from 'next/navigation';
@@ -32,6 +34,75 @@ import {
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+      onClick={() => void handleCopy()}
+      title="Копировать"
+    >
+      {copied ? <CheckIcon className="size-3.5" /> : <ClipboardIcon className="size-3.5" />}
+    </button>
+  );
+}
+
+function UserMessageActions({
+  text,
+  onEdit,
+}: {
+  text: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="mt-1 flex items-center justify-end gap-1">
+      <CopyButton text={text} />
+      <button
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+        onClick={onEdit}
+        title="Редактировать"
+      >
+        <PencilIcon className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AssistantMessageActions({
+  text,
+  latencyMs,
+  onRegenerate,
+}: {
+  text: string;
+  latencyMs: number | null;
+  onRegenerate: () => void;
+}) {
+  return (
+    <div className="mt-1 flex w-full items-center gap-1">
+      <CopyButton text={text} />
+      <button
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+        onClick={onRegenerate}
+        title="Повторить"
+      >
+        <RotateCcwIcon className="size-3.5" />
+      </button>
+      {latencyMs !== null && (
+        <span className="ml-1 text-xs text-muted-foreground">
+          {(latencyMs / 1000).toFixed(1)}с
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function Chat({
   id,
@@ -47,9 +118,13 @@ export default function Chat({
   const [currentModelId, setCurrentModelId] = useState<ChatModelId>(
     resolveChatModelId(initialChatModel),
   );
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
+  const sendTimeRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -58,7 +133,28 @@ export default function Chat({
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
 
-  const { messages, sendMessage, status } = useChat({
+  // Offline detection
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    regenerate,
+    setMessages,
+    stop,
+  } = useChat({
     id,
     messages: initialMessages,
     transport: new DefaultChatTransport({
@@ -80,7 +176,19 @@ export default function Chat({
       queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
   });
+
   const isAwaitingResponse = status === 'submitted' || status === 'streaming';
+
+  // Latency tracking
+  useEffect(() => {
+    if (status === 'submitted') {
+      sendTimeRef.current = Date.now();
+      setLastLatencyMs(null);
+    } else if (status === 'ready' && sendTimeRef.current > 0) {
+      setLastLatencyMs(Date.now() - sendTimeRef.current);
+      sendTimeRef.current = 0;
+    }
+  }, [status]);
 
   const lastAssistantMessage = [...messages]
     .reverse()
@@ -174,6 +282,11 @@ export default function Chat({
       <div className="relative flex-1">
         <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 sm:px-4">
+            {!isOnline && (
+              <div className="mx-auto mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                Нет соединения с интернетом
+              </div>
+            )}
             {messages.length <= 0 ? (
               <div className="mx-auto mt-10 w-full max-w-xl">
                 <AboutCard />
@@ -190,34 +303,80 @@ export default function Chat({
                       ? getReasoningText(message)
                       : '';
 
+                  const isLastAssistant =
+                    message.role === 'assistant' &&
+                    message.id === lastAssistantMessage?.id;
+
+                  const isEditing = editingMessageId === message.id;
+
                   return (
                     <div
                       key={index}
-                      className={`mb-5 flex ${
-                        message.role === 'user'
-                          ? 'justify-end whitespace-pre-wrap'
-                          : ''
+                      className={`mb-5 flex flex-col ${
+                        message.role === 'user' ? 'items-end' : 'items-start'
                       }`}
                     >
                       <div
-                        className={`${
+                        className={`group relative ${
                           message.role === 'user'
-                            ? 'bg-secondary'
-                            : 'bg-transparent w-full'
-                        } rounded-lg p-2`}
+                            ? `${isEditing ? 'w-full ' : ''}max-w-[85%] whitespace-pre-wrap`
+                            : 'w-full'
+                        }`}
                       >
-                        {reasoning ? <ReasoningBlock text={reasoning} /> : null}
-                        {message.role === 'assistant' ? (
-                          <Streamdown
-                            className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
-                            plugins={{ math: mathPlugin }}
-                          >
-                            {text}
-                          </Streamdown>
+                        {isEditing ? (
+                          <MessageEditor
+                            message={message}
+                            setMode={(mode) => {
+                              if (mode === 'view') setEditingMessageId(null);
+                            }}
+                            setMessages={setMessages}
+                            regenerate={regenerate}
+                          />
                         ) : (
-                          text
+                          <div
+                            className={`${
+                              message.role === 'user'
+                                ? 'bg-secondary'
+                                : 'bg-transparent w-full'
+                            } rounded-lg p-2`}
+                          >
+                            {reasoning ? (
+                              <ReasoningBlock text={reasoning} />
+                            ) : null}
+                            {message.role === 'assistant' ? (
+                              <Streamdown
+                                className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                plugins={{ math: mathPlugin }}
+                              >
+                                {text}
+                              </Streamdown>
+                            ) : (
+                              text
+                            )}
+                          </div>
                         )}
+
                       </div>
+
+                      {message.role === 'user' &&
+                        !isAwaitingResponse &&
+                        !isEditing && (
+                          <UserMessageActions
+                            text={text}
+                            onEdit={() => setEditingMessageId(message.id)}
+                          />
+                        )}
+
+                      {isLastAssistant && status === 'ready' && (
+                        <AssistantMessageActions
+                          text={text}
+                          latencyMs={lastLatencyMs}
+                          onRegenerate={async () => {
+                            await deleteTrailingMessages({ id: message.id });
+                            regenerate();
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -263,6 +422,11 @@ export default function Chat({
                     </div>
                   </div>
                 ) : null}
+                {status === 'error' && error && (
+                  <div className="mb-4 text-sm text-destructive">
+                    Ошибка: {error.message}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -292,9 +456,24 @@ export default function Chat({
                   className="mr-2 max-h-[200px] min-h-10 w-[95%] resize-none border-0 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   placeholder="Спроси что-нибудь..."
                 />
-                <Button disabled={!input.trim()} className="mb-0.5">
-                  <IconArrowUp />
-                </Button>
+                {isAwaitingResponse ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mb-0.5"
+                    onClick={stop}
+                  >
+                    <IconStop />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="mb-0.5"
+                  >
+                    <IconArrowUp />
+                  </Button>
+                )}
               </div>
             </form>
           </Card>

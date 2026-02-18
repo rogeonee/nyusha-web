@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, gt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte } from 'drizzle-orm';
 import { DEFAULT_CHAT_MODEL, type ChatModelId } from '@/lib/ai/models';
 import { getDb } from '@/lib/db';
 import { chats, messages, sessions, users } from '@/lib/db/schema';
@@ -148,7 +148,47 @@ export async function saveMessages(
 ) {
   const db = getDb();
   if (msgs.length === 0) return;
-  await db.insert(messages).values(msgs);
+  await db.insert(messages).values(msgs).onConflictDoNothing();
+}
+
+export async function getMessageById(id: string) {
+  const db = getDb();
+  const [msg] = await db.select().from(messages).where(eq(messages.id, id));
+  return msg ?? null;
+}
+
+export async function deleteMessagesFromId(messageId: string) {
+  const db = getDb();
+  const msg = await getMessageById(messageId);
+  if (!msg) return;
+  await db
+    .delete(messages)
+    .where(
+      and(
+        eq(messages.chatId, msg.chatId),
+        gte(messages.createdAt, msg.createdAt),
+      ),
+    );
+}
+
+export async function getMessageCountByUserId(
+  userId: string,
+  hoursBack: number,
+) {
+  const db = getDb();
+  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+  const [stats] = await db
+    .select({ count: count(messages.id) })
+    .from(messages)
+    .innerJoin(chats, eq(messages.chatId, chats.id))
+    .where(
+      and(
+        eq(chats.userId, userId),
+        eq(messages.role, 'user'),
+        gte(messages.createdAt, since),
+      ),
+    );
+  return stats?.count ?? 0;
 }
 
 export async function getMessagesByChatId(chatId: string) {
