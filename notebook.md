@@ -4,7 +4,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 
 ## Current State
 
-- **Completed:** Phase 0–3 (streaming, auth, persistence, model routing). Phase 4 (QoL: edit/regenerate, rate limiting, offline/error states, stop button, latency display).
+- **Completed:** Phase 0–3 (streaming, auth, persistence, model routing). Phase 4 closeout (QoL: edit/regenerate, rate limiting, offline/error states, stop button, latency display, thinking shimmer + elapsed timer, secure deterministic tail-delete).
 - **Next phase:** None scheduled. Non-Google providers deferred to a side track.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
@@ -14,7 +14,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Auth:** Invite-only credentials auth, JWT cookie sessions, DB-backed session records. Gated by `FAMILY_ALLOWED_EMAILS`.
 - **DB schema:** `users`, `sessions`, `chats` (with `model_id`), `messages`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone.
-- **Build/lint:** `pnpm build` and `pnpm lint` (`tsc --noEmit`) pass after Phase 3 updates.
+- **Build/lint:** `pnpm build` and `pnpm lint` (`tsc --noEmit`) pass after Phase 4 closeout updates.
+- **Phase 4 validation:** Local type/build checks pass; browser smoke scenarios (especially cross-account authz) should be re-checked with two real user sessions before production rollout.
 
 ## Active Risks and Gotchas
 
@@ -27,7 +28,6 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - `EnvCard` warning banner is no longer visible after global header removal; relocate if still needed.
 - No toast/feedback on chat deletion failures in sidebar.
 - `useChat` status values are `submitted | streaming | ready | error` (not `idle`); plan docs used wrong value.
-- `deleteMessagesFromId` deletes by `createdAt >=`, so two messages with identical timestamps could over-delete; extremely unlikely in practice.
 - `/api/chat` `maxDuration` is 90s. If timeouts still occur, increase further or reduce generation length.
 - Thinking tokens are billed even though only summaries are returned. If costs spike, lower `thinkingBudget`/`thinkingLevel` in `lib/ai/models.ts`.
 

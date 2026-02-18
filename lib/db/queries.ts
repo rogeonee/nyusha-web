@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, count, desc, eq, gt, gte } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray } from 'drizzle-orm';
 import { DEFAULT_CHAT_MODEL, type ChatModelId } from '@/lib/ai/models';
 import { getDb } from '@/lib/db';
 import { chats, messages, sessions, users } from '@/lib/db/schema';
@@ -151,24 +151,59 @@ export async function saveMessages(
   await db.insert(messages).values(msgs).onConflictDoNothing();
 }
 
-export async function getMessageById(id: string) {
-  const db = getDb();
-  const [msg] = await db.select().from(messages).where(eq(messages.id, id));
-  return msg ?? null;
-}
+export type DeleteMessageTailForUserResult =
+  | { ok: true; deletedCount: number }
+  | { ok: false; code: 'not_found' };
 
-export async function deleteMessagesFromId(messageId: string) {
+export async function deleteMessageTailForUser({
+  userId,
+  messageId,
+}: {
+  userId: string;
+  messageId: string;
+}): Promise<DeleteMessageTailForUserResult> {
   const db = getDb();
-  const msg = await getMessageById(messageId);
-  if (!msg) return;
+  const [target] = await db
+    .select({
+      chatId: messages.chatId,
+      chatUserId: chats.userId,
+    })
+    .from(messages)
+    .innerJoin(chats, eq(messages.chatId, chats.id))
+    .where(eq(messages.id, messageId));
+
+  if (!target || target.chatUserId !== userId) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  const chatMessageRows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.chatId, target.chatId))
+    .orderBy(asc(messages.createdAt), asc(messages.id));
+
+  const fromIndex = chatMessageRows.findIndex((row) => row.id === messageId);
+
+  if (fromIndex < 0) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  const idsToDelete = chatMessageRows.slice(fromIndex).map((row) => row.id);
+
+  if (idsToDelete.length === 0) {
+    return { ok: true, deletedCount: 0 };
+  }
+
   await db
     .delete(messages)
     .where(
       and(
-        eq(messages.chatId, msg.chatId),
-        gte(messages.createdAt, msg.createdAt),
+        eq(messages.chatId, target.chatId),
+        inArray(messages.id, idsToDelete),
       ),
     );
+
+  return { ok: true, deletedCount: idsToDelete.length };
 }
 
 export async function getMessageCountByUserId(

@@ -8,11 +8,11 @@ import { ArrowUpIcon, XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
-type Props = {
-  message: UIMessage;
+type Props<UI_MESSAGE extends UIMessage> = {
+  message: UI_MESSAGE;
   setMode: (mode: 'view' | 'edit') => void;
-  setMessages: UseChatHelpers<UIMessage>['setMessages'];
-  regenerate: UseChatHelpers<UIMessage>['regenerate'];
+  setMessages: UseChatHelpers<UI_MESSAGE>['setMessages'];
+  regenerate: UseChatHelpers<UI_MESSAGE>['regenerate'];
 };
 
 function extractText(message: UIMessage): string {
@@ -22,14 +22,15 @@ function extractText(message: UIMessage): string {
     .join('');
 }
 
-export function MessageEditor({
+export function MessageEditor<UI_MESSAGE extends UIMessage>({
   message,
   setMode,
   setMessages,
   regenerate,
-}: Props) {
+}: Props<UI_MESSAGE>) {
   const [draft, setDraft] = useState(extractText(message));
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -43,19 +44,36 @@ export function MessageEditor({
 
   const handleSend = async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || submitting) return;
+
     setSubmitting(true);
-    await deleteTrailingMessages({ id: message.id });
-    setMessages((msgs) => {
-      const idx = msgs.findIndex((m) => m.id === message.id);
-      if (idx === -1) return msgs;
-      return [
-        ...msgs.slice(0, idx),
-        { ...message, parts: [{ type: 'text', text }] },
-      ];
-    });
-    setMode('view');
-    regenerate();
+    setSubmitError(null);
+
+    try {
+      const deletionResult = await deleteTrailingMessages({ id: message.id });
+
+      if (!deletionResult.ok) {
+        setSubmitError(deletionResult.message);
+        return;
+      }
+
+      setMessages((msgs) => {
+        const idx = msgs.findIndex((m) => m.id === message.id);
+        if (idx === -1) return msgs;
+
+        return [
+          ...msgs.slice(0, idx),
+          { ...message, parts: [{ type: 'text', text }] } as UI_MESSAGE,
+        ];
+      });
+
+      setMode('view');
+      await regenerate();
+    } catch {
+      setSubmitError('Не удалось обновить сообщение. Попробуйте снова.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -64,8 +82,12 @@ export function MessageEditor({
         <Textarea
           ref={ref}
           value={draft}
+          disabled={submitting}
           onChange={(e) => {
             setDraft(e.target.value);
+            if (submitError) {
+              setSubmitError(null);
+            }
             const ta = e.currentTarget;
             ta.style.height = 'auto';
             ta.style.height = `${Math.min(ta.scrollHeight, 300)}px`;
@@ -83,6 +105,9 @@ export function MessageEditor({
           rows={1}
         />
       </div>
+      {submitError ? (
+        <p className="w-full text-xs text-destructive">{submitError}</p>
+      ) : null}
       <div className="flex items-center gap-1">
         <Button
           type="button"

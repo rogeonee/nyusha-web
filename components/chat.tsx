@@ -7,7 +7,13 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { IconArrowUp, IconStop } from '@/components/ui/icons';
-import { CheckIcon, ChevronRight, ClipboardIcon, PencilIcon, RotateCcwIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  ChevronRight,
+  ClipboardIcon,
+  PencilIcon,
+  RotateCcwIcon,
+} from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import {
@@ -22,6 +28,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { TextShimmer } from '@/components/ui/text-shimmer';
 import { MessageEditor } from '@/components/message-editor';
 import { deleteTrailingMessages } from '@/app/(chat)/actions';
 
@@ -50,7 +57,11 @@ function CopyButton({ text }: { text: string }) {
       onClick={() => void handleCopy()}
       title="Копировать"
     >
-      {copied ? <CheckIcon className="size-3.5" /> : <ClipboardIcon className="size-3.5" />}
+      {copied ? (
+        <CheckIcon className="size-3.5" />
+      ) : (
+        <ClipboardIcon className="size-3.5" />
+      )}
     </button>
   );
 }
@@ -63,7 +74,7 @@ function UserMessageActions({
   onEdit: () => void;
 }) {
   return (
-    <div className="mt-1 flex items-center justify-end gap-1">
+    <div className="mt-1 flex items-center justify-end gap-1 opacity-100 pointer-events-auto transition-opacity md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
       <CopyButton text={text} />
       <button
         className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -80,24 +91,34 @@ function AssistantMessageActions({
   text,
   latencyMs,
   onRegenerate,
+  isRegenerating,
 }: {
   text: string;
   latencyMs: number | null;
   onRegenerate: () => void;
+  isRegenerating: boolean;
 }) {
+  const formatLatency = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes} min, ${seconds} sec`;
+  };
+
   return (
     <div className="mt-1 flex w-full items-center gap-1">
       <CopyButton text={text} />
       <button
         className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
         onClick={onRegenerate}
+        disabled={isRegenerating}
         title="Повторить"
       >
         <RotateCcwIcon className="size-3.5" />
       </button>
       {latencyMs !== null && (
         <span className="ml-1 text-xs text-muted-foreground">
-          {(latencyMs / 1000).toFixed(1)}с
+          {formatLatency(latencyMs)}
         </span>
       )}
     </div>
@@ -120,7 +141,10 @@ export default function Chat({
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
@@ -190,6 +214,27 @@ export default function Chat({
     }
   }, [status]);
 
+  useEffect(() => {
+    if (!isAwaitingResponse) {
+      setThinkingElapsedMs(0);
+      return;
+    }
+
+    const startedAt =
+      sendTimeRef.current > 0 ? sendTimeRef.current : Date.now();
+
+    const tick = () => {
+      setThinkingElapsedMs(Math.max(0, Date.now() - startedAt));
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isAwaitingResponse]);
+
   const lastAssistantMessage = [...messages]
     .reverse()
     .find((m) => m.role === 'assistant');
@@ -248,6 +293,12 @@ export default function Chat({
   const latestChunkTitle = hasStructuredStreamingChunks
     ? streamingChunks[streamingChunks.length - 1].title
     : 'Мысли модели';
+  const formatElapsedThinking = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes} min, ${seconds} sec`;
+  };
 
   const resizeTextarea = useCallback(() => {
     const ta = textareaRef.current;
@@ -261,6 +312,7 @@ export default function Chat({
     const prompt = input.trim();
     if (!prompt) return;
 
+    setRegenerateError(null);
     setInput('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -274,6 +326,33 @@ export default function Chat({
       void handleSubmit(e);
     }
   };
+
+  const handleRegenerate = useCallback(
+    async (messageId: string) => {
+      if (isRegenerating) {
+        return;
+      }
+
+      setRegenerateError(null);
+      setIsRegenerating(true);
+
+      try {
+        const deletionResult = await deleteTrailingMessages({ id: messageId });
+
+        if (!deletionResult.ok) {
+          setRegenerateError(deletionResult.message);
+          return;
+        }
+
+        await regenerate({ messageId });
+      } catch {
+        setRegenerateError('Не удалось повторить ответ. Попробуйте снова.');
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [isRegenerating, regenerate],
+  );
 
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-background">
@@ -293,7 +372,7 @@ export default function Chat({
               </div>
             ) : (
               <div className="mt-10 w-full">
-                {messages.map((message, index) => {
+                {messages.map((message) => {
                   const text = getMessageText(message);
 
                   if (message.role === 'assistant' && !text) return null;
@@ -311,15 +390,19 @@ export default function Chat({
 
                   return (
                     <div
-                      key={index}
+                      key={message.id}
                       className={`mb-5 flex flex-col ${
-                        message.role === 'user' ? 'items-end' : 'items-start'
+                        message.role === 'user'
+                          ? 'group items-end'
+                          : 'items-start'
                       }`}
                     >
                       <div
                         className={`group relative ${
                           message.role === 'user'
-                            ? `${isEditing ? 'w-full ' : ''}max-w-[85%] whitespace-pre-wrap`
+                            ? `${
+                                isEditing ? 'w-full ' : ''
+                              }max-w-[85%] whitespace-pre-wrap`
                             : 'w-full'
                         }`}
                       >
@@ -355,7 +438,6 @@ export default function Chat({
                             )}
                           </div>
                         )}
-
                       </div>
 
                       {message.role === 'user' &&
@@ -371,10 +453,8 @@ export default function Chat({
                         <AssistantMessageActions
                           text={text}
                           latencyMs={lastLatencyMs}
-                          onRegenerate={async () => {
-                            await deleteTrailingMessages({ id: message.id });
-                            regenerate();
-                          }}
+                          onRegenerate={() => void handleRegenerate(message.id)}
+                          isRegenerating={isRegenerating}
                         />
                       )}
                     </div>
@@ -385,10 +465,17 @@ export default function Chat({
                     <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
                       {normalizedStreamingReasoningText ? (
                         <Collapsible>
-                          <CollapsibleTrigger className="flex items-center gap-1 hover:text-foreground transition-colors">
-                            <ChevronRight className="size-3" />
-                            {latestChunkTitle}
-                          </CollapsibleTrigger>
+                          <div className="flex items-center gap-3">
+                            <CollapsibleTrigger className="group/trigger flex items-center gap-1 transition-colors hover:text-foreground">
+                              <ChevronRight className="size-3 transition-transform group-data-[state=open]/trigger:rotate-90" />
+                              <TextShimmer className="text-sm" duration={3}>
+                                {latestChunkTitle}
+                              </TextShimmer>
+                            </CollapsibleTrigger>
+                            <span className="text-xs tabular-nums text-muted-foreground/80">
+                              {formatElapsedThinking(thinkingElapsedMs)}
+                            </span>
+                          </div>
                           <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
                             {hasStructuredStreamingChunks ? (
                               streamingChunks.map((chunk, i) => (
@@ -409,9 +496,16 @@ export default function Chat({
                           </CollapsibleContent>
                         </Collapsible>
                       ) : (
-                        <span className="text-sm">
-                          {getChatModelById(currentModelId).name} думает...
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <TextShimmer className="text-sm" duration={3}>
+                            {`${
+                              getChatModelById(currentModelId).name
+                            } думает...`}
+                          </TextShimmer>
+                          <span className="text-xs tabular-nums text-muted-foreground/80">
+                            {formatElapsedThinking(thinkingElapsedMs)}
+                          </span>
+                        </div>
                       )}
                       {showLongWaitNotice ? (
                         <div className="mt-2 leading-relaxed">
@@ -427,6 +521,11 @@ export default function Chat({
                     Ошибка: {error.message}
                   </div>
                 )}
+                {regenerateError ? (
+                  <div className="mb-4 text-sm text-destructive">
+                    Ошибка: {regenerateError}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

@@ -26,6 +26,10 @@ import {
 import { type PostRequestBody, postRequestBodySchema } from './schema';
 
 export const maxDuration = 90;
+const DAILY_MESSAGE_LIMIT = 200;
+const DAILY_LIMIT_WINDOW_HOURS = 24;
+const DAILY_LIMIT_ERROR_MESSAGE =
+  'Вы достигли дневного лимита сообщений. Попробуйте завтра.';
 
 function extractMessageText(message: UIMessage): string {
   return message.parts
@@ -46,13 +50,12 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const DAILY_MESSAGE_LIMIT = 200;
-  const messageCount = await getMessageCountByUserId(user.id, 24);
+  const messageCount = await getMessageCountByUserId(
+    user.id,
+    DAILY_LIMIT_WINDOW_HOURS,
+  );
   if (messageCount >= DAILY_MESSAGE_LIMIT) {
-    return Response.json(
-      { error: 'Вы достигли дневного лимита сообщений. Попробуйте завтра.' },
-      { status: 429 },
-    );
+    return Response.json({ error: DAILY_LIMIT_ERROR_MESSAGE }, { status: 429 });
   }
 
   let requestBody: PostRequestBody;
