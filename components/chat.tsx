@@ -6,8 +6,14 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { IconArrowUp } from '@/components/ui/icons';
-import { ChevronRight } from 'lucide-react';
+import { IconArrowUp, IconStop } from '@/components/ui/icons';
+import {
+  CheckIcon,
+  ChevronRight,
+  ClipboardIcon,
+  PencilIcon,
+  RotateCcwIcon,
+} from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import {
@@ -22,6 +28,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { TextShimmer } from '@/components/ui/text-shimmer';
+import { MessageEditor } from '@/components/message-editor';
+import { deleteTrailingMessages } from '@/app/(chat)/actions';
 
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 import { useRouter, usePathname } from 'next/navigation';
@@ -32,6 +41,89 @@ import {
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+      onClick={() => void handleCopy()}
+      title="Копировать"
+    >
+      {copied ? (
+        <CheckIcon className="size-3.5" />
+      ) : (
+        <ClipboardIcon className="size-3.5" />
+      )}
+    </button>
+  );
+}
+
+function UserMessageActions({
+  text,
+  onEdit,
+}: {
+  text: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="mt-1 flex items-center justify-end gap-1 opacity-100 pointer-events-auto transition-opacity md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
+      <CopyButton text={text} />
+      <button
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+        onClick={onEdit}
+        title="Редактировать"
+      >
+        <PencilIcon className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AssistantMessageActions({
+  text,
+  latencyMs,
+  onRegenerate,
+  isRegenerating,
+}: {
+  text: string;
+  latencyMs: number | null;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
+}) {
+  const formatLatency = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes} min, ${seconds} sec`;
+  };
+
+  return (
+    <div className="mt-1 flex w-full items-center gap-1">
+      <CopyButton text={text} />
+      <button
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+        onClick={onRegenerate}
+        disabled={isRegenerating}
+        title="Повторить"
+      >
+        <RotateCcwIcon className="size-3.5" />
+      </button>
+      {latencyMs !== null && (
+        <span className="ml-1 text-xs text-muted-foreground">
+          {formatLatency(latencyMs)}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function Chat({
   id,
@@ -47,9 +139,16 @@ export default function Chat({
   const [currentModelId, setCurrentModelId] = useState<ChatModelId>(
     resolveChatModelId(initialChatModel),
   );
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
+  const sendTimeRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -58,7 +157,28 @@ export default function Chat({
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
 
-  const { messages, sendMessage, status } = useChat({
+  // Offline detection
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    regenerate,
+    setMessages,
+    stop,
+  } = useChat({
     id,
     messages: initialMessages,
     transport: new DefaultChatTransport({
@@ -80,7 +200,40 @@ export default function Chat({
       queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
   });
+
   const isAwaitingResponse = status === 'submitted' || status === 'streaming';
+
+  // Latency tracking
+  useEffect(() => {
+    if (status === 'submitted') {
+      sendTimeRef.current = Date.now();
+      setLastLatencyMs(null);
+    } else if (status === 'ready' && sendTimeRef.current > 0) {
+      setLastLatencyMs(Date.now() - sendTimeRef.current);
+      sendTimeRef.current = 0;
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (!isAwaitingResponse) {
+      setThinkingElapsedMs(0);
+      return;
+    }
+
+    const startedAt =
+      sendTimeRef.current > 0 ? sendTimeRef.current : Date.now();
+
+    const tick = () => {
+      setThinkingElapsedMs(Math.max(0, Date.now() - startedAt));
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isAwaitingResponse]);
 
   const lastAssistantMessage = [...messages]
     .reverse()
@@ -140,6 +293,12 @@ export default function Chat({
   const latestChunkTitle = hasStructuredStreamingChunks
     ? streamingChunks[streamingChunks.length - 1].title
     : 'Мысли модели';
+  const formatElapsedThinking = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes} min, ${seconds} sec`;
+  };
 
   const resizeTextarea = useCallback(() => {
     const ta = textareaRef.current;
@@ -153,6 +312,7 @@ export default function Chat({
     const prompt = input.trim();
     if (!prompt) return;
 
+    setRegenerateError(null);
     setInput('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -167,6 +327,33 @@ export default function Chat({
     }
   };
 
+  const handleRegenerate = useCallback(
+    async (messageId: string) => {
+      if (isRegenerating) {
+        return;
+      }
+
+      setRegenerateError(null);
+      setIsRegenerating(true);
+
+      try {
+        const deletionResult = await deleteTrailingMessages({ id: messageId });
+
+        if (!deletionResult.ok) {
+          setRegenerateError(deletionResult.message);
+          return;
+        }
+
+        await regenerate({ messageId });
+      } catch {
+        setRegenerateError('Не удалось повторить ответ. Попробуйте снова.');
+      } finally {
+        setIsRegenerating(false);
+      }
+    },
+    [isRegenerating, regenerate],
+  );
+
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-background">
       <ChatHeader />
@@ -174,13 +361,18 @@ export default function Chat({
       <div className="relative flex-1">
         <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 sm:px-4">
+            {!isOnline && (
+              <div className="mx-auto mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                Нет соединения с интернетом
+              </div>
+            )}
             {messages.length <= 0 ? (
               <div className="mx-auto mt-10 w-full max-w-xl">
                 <AboutCard />
               </div>
             ) : (
               <div className="mt-10 w-full">
-                {messages.map((message, index) => {
+                {messages.map((message) => {
                   const text = getMessageText(message);
 
                   if (message.role === 'assistant' && !text) return null;
@@ -190,34 +382,81 @@ export default function Chat({
                       ? getReasoningText(message)
                       : '';
 
+                  const isLastAssistant =
+                    message.role === 'assistant' &&
+                    message.id === lastAssistantMessage?.id;
+
+                  const isEditing = editingMessageId === message.id;
+
                   return (
                     <div
-                      key={index}
-                      className={`mb-5 flex ${
+                      key={message.id}
+                      className={`mb-5 flex flex-col ${
                         message.role === 'user'
-                          ? 'justify-end whitespace-pre-wrap'
-                          : ''
+                          ? 'group items-end'
+                          : 'items-start'
                       }`}
                     >
                       <div
-                        className={`${
+                        className={`group relative ${
                           message.role === 'user'
-                            ? 'bg-secondary'
-                            : 'bg-transparent w-full'
-                        } rounded-lg p-2`}
+                            ? `${
+                                isEditing ? 'w-full ' : ''
+                              }max-w-[85%] whitespace-pre-wrap`
+                            : 'w-full'
+                        }`}
                       >
-                        {reasoning ? <ReasoningBlock text={reasoning} /> : null}
-                        {message.role === 'assistant' ? (
-                          <Streamdown
-                            className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
-                            plugins={{ math: mathPlugin }}
-                          >
-                            {text}
-                          </Streamdown>
+                        {isEditing ? (
+                          <MessageEditor
+                            message={message}
+                            setMode={(mode) => {
+                              if (mode === 'view') setEditingMessageId(null);
+                            }}
+                            setMessages={setMessages}
+                            regenerate={regenerate}
+                          />
                         ) : (
-                          text
+                          <div
+                            className={`${
+                              message.role === 'user'
+                                ? 'bg-secondary'
+                                : 'bg-transparent w-full'
+                            } rounded-lg p-2`}
+                          >
+                            {reasoning ? (
+                              <ReasoningBlock text={reasoning} />
+                            ) : null}
+                            {message.role === 'assistant' ? (
+                              <Streamdown
+                                className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                plugins={{ math: mathPlugin }}
+                              >
+                                {text}
+                              </Streamdown>
+                            ) : (
+                              text
+                            )}
+                          </div>
                         )}
                       </div>
+
+                      {message.role === 'user' &&
+                        !isAwaitingResponse &&
+                        !isEditing && (
+                          <UserMessageActions
+                            text={text}
+                            onEdit={() => setEditingMessageId(message.id)}
+                          />
+                        )}
+
+                      {isLastAssistant && status === 'ready' && (
+                        <AssistantMessageActions
+                          text={text}
+                          latencyMs={lastLatencyMs}
+                          onRegenerate={() => void handleRegenerate(message.id)}
+                          isRegenerating={isRegenerating}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -226,10 +465,17 @@ export default function Chat({
                     <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
                       {normalizedStreamingReasoningText ? (
                         <Collapsible>
-                          <CollapsibleTrigger className="flex items-center gap-1 hover:text-foreground transition-colors">
-                            <ChevronRight className="size-3" />
-                            {latestChunkTitle}
-                          </CollapsibleTrigger>
+                          <div className="flex items-center gap-3">
+                            <CollapsibleTrigger className="group/trigger flex items-center gap-1 transition-colors hover:text-foreground">
+                              <ChevronRight className="size-3 transition-transform group-data-[state=open]/trigger:rotate-90" />
+                              <TextShimmer className="text-sm" duration={3}>
+                                {latestChunkTitle}
+                              </TextShimmer>
+                            </CollapsibleTrigger>
+                            <span className="text-xs tabular-nums text-muted-foreground/80">
+                              {formatElapsedThinking(thinkingElapsedMs)}
+                            </span>
+                          </div>
                           <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
                             {hasStructuredStreamingChunks ? (
                               streamingChunks.map((chunk, i) => (
@@ -250,9 +496,16 @@ export default function Chat({
                           </CollapsibleContent>
                         </Collapsible>
                       ) : (
-                        <span className="text-sm">
-                          {getChatModelById(currentModelId).name} думает...
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <TextShimmer className="text-sm" duration={3}>
+                            {`${
+                              getChatModelById(currentModelId).name
+                            } думает...`}
+                          </TextShimmer>
+                          <span className="text-xs tabular-nums text-muted-foreground/80">
+                            {formatElapsedThinking(thinkingElapsedMs)}
+                          </span>
+                        </div>
                       )}
                       {showLongWaitNotice ? (
                         <div className="mt-2 leading-relaxed">
@@ -261,6 +514,16 @@ export default function Chat({
                         </div>
                       ) : null}
                     </div>
+                  </div>
+                ) : null}
+                {status === 'error' && error && (
+                  <div className="mb-4 text-sm text-destructive">
+                    Ошибка: {error.message}
+                  </div>
+                )}
+                {regenerateError ? (
+                  <div className="mb-4 text-sm text-destructive">
+                    Ошибка: {regenerateError}
                   </div>
                 ) : null}
               </div>
@@ -292,9 +555,24 @@ export default function Chat({
                   className="mr-2 max-h-[200px] min-h-10 w-[95%] resize-none border-0 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   placeholder="Спроси что-нибудь..."
                 />
-                <Button disabled={!input.trim()} className="mb-0.5">
-                  <IconArrowUp />
-                </Button>
+                {isAwaitingResponse ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mb-0.5"
+                    onClick={stop}
+                  >
+                    <IconStop />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="mb-0.5"
+                  >
+                    <IconArrowUp />
+                  </Button>
+                )}
               </div>
             </form>
           </Card>

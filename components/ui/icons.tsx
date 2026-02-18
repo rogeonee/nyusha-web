@@ -1,7 +1,7 @@
-'use client'
+'use client';
 
-import * as React from 'react'
-import { cn } from '@/lib/utils'
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
 function IconSeparator({ className, ...props }: React.ComponentProps<'svg'>) {
   return (
@@ -19,16 +19,15 @@ function IconSeparator({ className, ...props }: React.ComponentProps<'svg'>) {
     >
       <path d="M16.88 3.549L7.12 20.451"></path>
     </svg>
-  )
+  );
 }
-
 
 function IconNextChat({
   className,
   inverted,
   ...props
 }: React.ComponentProps<'svg'> & { inverted?: boolean }) {
-  const id = React.useId()
+  const id = React.useId();
 
   return (
     <svg
@@ -104,7 +103,7 @@ function IconNextChat({
         />
       </g>
     </svg>
-  )
+  );
 }
 
 function IconVercel({ className, ...props }: React.ComponentProps<'svg'>) {
@@ -121,7 +120,7 @@ function IconVercel({ className, ...props }: React.ComponentProps<'svg'>) {
         fill="currentColor"
       ></path>
     </svg>
-  )
+  );
 }
 
 function IconArrowUp({ className, ...props }: React.ComponentProps<'svg'>) {
@@ -137,13 +136,21 @@ function IconArrowUp({ className, ...props }: React.ComponentProps<'svg'>) {
     >
       <path d="M122.34 34.34l72 72a8 8 0 0 1-11.32 11.32L136 59.31V216a8 8 0 0 1-16 0V59.31L73.66 117.66a8 8 0 0 1-11.32-11.32l72-72a8 8 0 0 1 11.32 0Z" />
     </svg>
-  )
+  );
 }
 
-
-export {
-  IconSeparator,
-  IconNextChat,
-  IconVercel,
-  IconArrowUp
+function IconStop({ className, ...props }: React.ComponentProps<'svg'>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('size-4', className)}
+      {...props}
+    >
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  );
 }
+
+export { IconSeparator, IconNextChat, IconVercel, IconArrowUp, IconStop };

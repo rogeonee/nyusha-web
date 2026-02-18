@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, gt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray } from 'drizzle-orm';
 import { DEFAULT_CHAT_MODEL, type ChatModelId } from '@/lib/ai/models';
 import { getDb } from '@/lib/db';
 import { chats, messages, sessions, users } from '@/lib/db/schema';
@@ -148,7 +148,82 @@ export async function saveMessages(
 ) {
   const db = getDb();
   if (msgs.length === 0) return;
-  await db.insert(messages).values(msgs);
+  await db.insert(messages).values(msgs).onConflictDoNothing();
+}
+
+export type DeleteMessageTailForUserResult =
+  | { ok: true; deletedCount: number }
+  | { ok: false; code: 'not_found' };
+
+export async function deleteMessageTailForUser({
+  userId,
+  messageId,
+}: {
+  userId: string;
+  messageId: string;
+}): Promise<DeleteMessageTailForUserResult> {
+  const db = getDb();
+  const [target] = await db
+    .select({
+      chatId: messages.chatId,
+      chatUserId: chats.userId,
+    })
+    .from(messages)
+    .innerJoin(chats, eq(messages.chatId, chats.id))
+    .where(eq(messages.id, messageId));
+
+  if (!target || target.chatUserId !== userId) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  const chatMessageRows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.chatId, target.chatId))
+    .orderBy(asc(messages.createdAt), asc(messages.id));
+
+  const fromIndex = chatMessageRows.findIndex((row) => row.id === messageId);
+
+  if (fromIndex < 0) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  const idsToDelete = chatMessageRows.slice(fromIndex).map((row) => row.id);
+
+  if (idsToDelete.length === 0) {
+    return { ok: true, deletedCount: 0 };
+  }
+
+  await db
+    .delete(messages)
+    .where(
+      and(
+        eq(messages.chatId, target.chatId),
+        inArray(messages.id, idsToDelete),
+      ),
+    );
+
+  return { ok: true, deletedCount: idsToDelete.length };
+}
+
+export async function getMessageCountByUserId(
+  userId: string,
+  hoursBack: number,
+) {
+  const db = getDb();
+  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+  const [stats] = await db
+    .select({ count: count(messages.id) })
+    .from(messages)
+    .innerJoin(chats, eq(messages.chatId, chats.id))
+    .where(
+      and(
+        eq(chats.userId, userId),
+        eq(messages.role, 'user'),
+        gte(messages.createdAt, since),
+      ),
+    );
+  return stats?.count ?? 0;
 }
 
 export async function getMessagesByChatId(chatId: string) {
