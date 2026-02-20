@@ -19,17 +19,27 @@ import {
   createChat,
   deleteChatById,
   getChatById,
-  getMessageCountByUserId,
+  getMessageByIdAndChatId,
+  getMessagesByChatId,
+  releaseAssistantGenerationSlot,
+  reserveAssistantGenerationSlot,
+  saveMessageIfAbsent,
   saveMessages,
   updateChatModelById,
 } from '@/lib/db/queries';
 import { type PostRequestBody, postRequestBodySchema } from './schema';
 
 export const maxDuration = 90;
-const DAILY_MESSAGE_LIMIT = 200;
+const DAILY_ASSISTANT_MESSAGE_LIMIT = 200;
 const DAILY_LIMIT_WINDOW_HOURS = 24;
+const ASSISTANT_RESERVATION_TTL_MINUTES = 5;
 const DAILY_LIMIT_ERROR_MESSAGE =
   'Вы достигли дневного лимита сообщений. Попробуйте завтра.';
+const DUPLICATE_MESSAGE_ERROR =
+  'Это сообщение уже обработано. Обновите чат и попробуйте снова.';
+const CHAT_CONFLICT_ERROR =
+  'Состояние чата изменилось. Обновите страницу и повторите попытку.';
+const INVALID_USER_MESSAGE_ERROR = 'Некорректное пользовательское сообщение.';
 
 function extractMessageText(message: UIMessage): string {
   return message.parts
@@ -43,19 +53,44 @@ function extractMessageText(message: UIMessage): string {
     .join('');
 }
 
+function extractTextFromStoredParts(parts: unknown): string {
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .map((part) => {
+      if (
+        typeof part === 'object' &&
+        part !== null &&
+        'type' in part &&
+        'text' in part &&
+        part.type === 'text' &&
+        typeof part.text === 'string'
+      ) {
+        return part.text;
+      }
+
+      return '';
+    })
+    .join('');
+}
+
+function getCanonicalUserParts(message: UIMessage) {
+  const text = extractMessageText(message);
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  return [{ type: 'text' as const, text }];
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
 
   if (!user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const messageCount = await getMessageCountByUserId(
-    user.id,
-    DAILY_LIMIT_WINDOW_HOURS,
-  );
-  if (messageCount >= DAILY_MESSAGE_LIMIT) {
-    return Response.json({ error: DAILY_LIMIT_ERROR_MESSAGE }, { status: 429 });
   }
 
   let requestBody: PostRequestBody;
@@ -66,7 +101,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  const { id, selectedChatModel } = requestBody;
+  const { id, selectedChatModel, trigger, messageId } = requestBody;
 
   if (!isChatModelId(selectedChatModel)) {
     return Response.json(
@@ -77,27 +112,57 @@ export async function POST(request: Request) {
 
   const messages = requestBody.messages as UIMessage[];
   const requestedModelId = selectedChatModel as ChatModelId;
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === 'user');
+
+  if (!lastUserMessage) {
+    return Response.json(
+      { error: INVALID_USER_MESSAGE_ERROR },
+      { status: 400 },
+    );
+  }
+
+  if (
+    trigger === 'submit-message' &&
+    messageId &&
+    messageId !== lastUserMessage.id
+  ) {
+    return Response.json({ error: 'Bad request' }, { status: 400 });
+  }
+
+  const canonicalUserParts = getCanonicalUserParts(lastUserMessage);
+
+  if (!canonicalUserParts) {
+    return Response.json(
+      { error: INVALID_USER_MESSAGE_ERROR },
+      { status: 400 },
+    );
+  }
 
   // Ensure chat exists — create on first message
-  const existingChat = await getChatById(id);
+  let chat = await getChatById(id);
 
-  if (existingChat && existingChat.userId !== user.id) {
+  if (chat && chat.userId !== user.id) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }
 
-  if (!existingChat) {
-    const firstUserMessage = messages.find((m) => m.role === 'user');
-    const title = firstUserMessage
-      ? extractMessageText(firstUserMessage).slice(0, 100) || 'New Chat'
-      : 'New Chat';
+  if (!chat) {
+    const title =
+      extractMessageText(lastUserMessage).slice(0, 100) || 'New Chat';
 
-    await createChat({ id, userId: user.id, title, modelId: requestedModelId });
+    chat = await createChat({
+      id,
+      userId: user.id,
+      title,
+      modelId: requestedModelId,
+    });
   }
 
   let activeModelId = requestedModelId;
 
-  if (existingChat) {
-    const storedModelId = resolveChatModelId(existingChat.modelId);
+  if (chat) {
+    const storedModelId = resolveChatModelId(chat.modelId);
 
     if (storedModelId !== requestedModelId) {
       await updateChatModelById({ chatId: id, modelId: requestedModelId });
@@ -107,21 +172,71 @@ export async function POST(request: Request) {
     }
   }
 
-  // Save the latest user message
-  const lastUserMessage = [...messages]
-    .reverse()
-    .find((m) => m.role === 'user');
+  const existingUserMessage = await getMessageByIdAndChatId({
+    messageId: lastUserMessage.id,
+    chatId: id,
+  });
 
-  if (lastUserMessage) {
-    await saveMessages([
-      {
+  if (trigger === 'submit-message') {
+    if (existingUserMessage) {
+      return Response.json({ error: DUPLICATE_MESSAGE_ERROR }, { status: 409 });
+    }
+
+    const inserted = await saveMessageIfAbsent({
+      id: lastUserMessage.id,
+      chatId: id,
+      role: 'user',
+      parts: canonicalUserParts,
+    });
+
+    if (!inserted) {
+      return Response.json({ error: DUPLICATE_MESSAGE_ERROR }, { status: 409 });
+    }
+  } else {
+    if (existingUserMessage) {
+      if (existingUserMessage.role !== 'user') {
+        return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
+      }
+
+      const storedText = extractTextFromStoredParts(existingUserMessage.parts);
+      const incomingText = canonicalUserParts.map((part) => part.text).join('');
+
+      if (storedText !== incomingText) {
+        return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
+      }
+    } else {
+      const inserted = await saveMessageIfAbsent({
         id: lastUserMessage.id,
         chatId: id,
-        role: lastUserMessage.role,
-        parts: lastUserMessage.parts,
-      },
-    ]);
+        role: 'user',
+        parts: canonicalUserParts,
+      });
+
+      if (!inserted) {
+        return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
+      }
+    }
   }
+
+  const reservation = await reserveAssistantGenerationSlot({
+    userId: user.id,
+    dailyLimit: DAILY_ASSISTANT_MESSAGE_LIMIT,
+    hoursBack: DAILY_LIMIT_WINDOW_HOURS,
+    reservationTtlMinutes: ASSISTANT_RESERVATION_TTL_MINUTES,
+  });
+
+  if (!reservation.ok) {
+    return Response.json({ error: DAILY_LIMIT_ERROR_MESSAGE }, { status: 429 });
+  }
+
+  const reservationId = reservation.reservationId;
+  const persistedMessages = await getMessagesByChatId(id);
+  const persistedUiMessages: UIMessage[] = persistedMessages.map((message) => ({
+    id: message.id,
+    role: message.role as UIMessage['role'],
+    parts: message.parts as UIMessage['parts'],
+    createdAt: message.createdAt,
+  }));
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
@@ -134,7 +249,7 @@ export async function POST(request: Request) {
           result: streamText({
             model,
             system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
-            messages: await convertToModelMessages(messages),
+            messages: await convertToModelMessages(persistedUiMessages),
             tools: {
               google_search: google.tools.googleSearch({}),
             },
@@ -174,6 +289,7 @@ export async function POST(request: Request) {
         }
 
         const chatModel = getChatModelById(activeModelId);
+        await releaseAssistantGenerationSlot(reservationId);
         writer.write({
           type: 'error',
           errorText: `Модель ${chatModel.name} сейчас недоступна. Попробуйте выбрать другую модель.`,
@@ -181,14 +297,20 @@ export async function POST(request: Request) {
       }
     },
     onFinish: async ({ responseMessage }) => {
-      await saveMessages([
-        {
-          id: responseMessage.id,
-          chatId: id,
-          role: responseMessage.role,
-          parts: responseMessage.parts as unknown[],
-        },
-      ]);
+      try {
+        if (responseMessage.role === 'assistant') {
+          await saveMessages([
+            {
+              id: responseMessage.id,
+              chatId: id,
+              role: responseMessage.role,
+              parts: responseMessage.parts as unknown[],
+            },
+          ]);
+        }
+      } finally {
+        await releaseAssistantGenerationSlot(reservationId);
+      }
     },
   });
 

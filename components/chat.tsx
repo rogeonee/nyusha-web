@@ -4,6 +4,8 @@ import { Card } from '@/components/ui/card';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
+import { useQueryClient } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { IconArrowUp, IconStop } from '@/components/ui/icons';
@@ -28,19 +30,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { toast } from 'sonner';
 import { TextShimmer } from '@/components/ui/text-shimmer';
 import { MessageEditor } from '@/components/message-editor';
 import { deleteTrailingMessages } from '@/app/(chat)/actions';
-
-const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
-import { useRouter, usePathname } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_CHAT_MODEL,
   getChatModelById,
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
+
+const OFFLINE_ERROR_MESSAGE =
+  'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
+const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -91,12 +94,12 @@ function AssistantMessageActions({
   text,
   latencyMs,
   onRegenerate,
-  isRegenerating,
+  isDisabled,
 }: {
   text: string;
   latencyMs: number | null;
   onRegenerate: () => void;
-  isRegenerating: boolean;
+  isDisabled: boolean;
 }) {
   const formatLatency = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -111,7 +114,7 @@ function AssistantMessageActions({
       <button
         className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
         onClick={onRegenerate}
-        disabled={isRegenerating}
+        disabled={isDisabled}
         title="Повторить"
       >
         <RotateCcwIcon className="size-3.5" />
@@ -189,6 +192,8 @@ export default function Chat({
             id: request.id,
             messages: request.messages,
             selectedChatModel: currentModelIdRef.current,
+            trigger: request.trigger,
+            messageId: request.messageId,
           },
         };
       },
@@ -309,6 +314,12 @@ export default function Chat({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isOnline) {
+      toast.error(OFFLINE_ERROR_MESSAGE);
+      return;
+    }
+
     const prompt = input.trim();
     if (!prompt) return;
 
@@ -323,6 +334,12 @@ export default function Chat({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+
+      if (!isOnline) {
+        toast.error(OFFLINE_ERROR_MESSAGE);
+        return;
+      }
+
       void handleSubmit(e);
     }
   };
@@ -330,6 +347,11 @@ export default function Chat({
   const handleRegenerate = useCallback(
     async (messageId: string) => {
       if (isRegenerating) {
+        return;
+      }
+
+      if (!isOnline) {
+        toast.error(OFFLINE_ERROR_MESSAGE);
         return;
       }
 
@@ -351,7 +373,7 @@ export default function Chat({
         setIsRegenerating(false);
       }
     },
-    [isRegenerating, regenerate],
+    [isOnline, isRegenerating, regenerate],
   );
 
   return (
@@ -454,7 +476,7 @@ export default function Chat({
                           text={text}
                           latencyMs={lastLatencyMs}
                           onRegenerate={() => void handleRegenerate(message.id)}
-                          isRegenerating={isRegenerating}
+                          isDisabled={isRegenerating || !isOnline}
                         />
                       )}
                     </div>
@@ -567,7 +589,7 @@ export default function Chat({
                 ) : (
                   <Button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || !isOnline}
                     className="mb-0.5"
                   >
                     <IconArrowUp />

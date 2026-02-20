@@ -5,16 +5,33 @@ import { z } from 'zod';
 import { isAllowedFamilyEmail } from '@/lib/auth/allowlist';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { createUserSession, destroyCurrentSession } from '@/lib/auth/session';
-import { createUser, getUserByEmail } from '@/lib/db/queries';
+import {
+  createUser,
+  getUserByEmail,
+  recordFailedLoginAttempt,
+  resetFailedLoginAttempts,
+} from '@/lib/db/queries';
 
 const authFormSchema = z.object({
   email: z.email(),
   password: z.string().min(8).max(128),
 });
 
+const LOGIN_LOCKOUT_THRESHOLD = 5;
+const LOGIN_LOCKOUT_DURATION_MINUTES = 15;
+const LOGIN_FAILURE_DELAY_MS = 600;
+
 function redirectWithError(path: '/login' | '/register', error: string): never {
   const params = new URLSearchParams({ error });
   redirect(`${path}?${params.toString()}`);
+}
+
+async function waitForFailedLoginDelay() {
+  await new Promise((resolve) => setTimeout(resolve, LOGIN_FAILURE_DELAY_MS));
+}
+
+function isAccountLocked(lockedUntil?: Date | null) {
+  return lockedUntil instanceof Date && lockedUntil.getTime() > Date.now();
 }
 
 export async function loginAction(formData: FormData) {
@@ -33,7 +50,13 @@ export async function loginAction(formData: FormData) {
   );
 
   if (!user) {
+    await waitForFailedLoginDelay();
     redirectWithError('/login', 'invalid_credentials');
+  }
+
+  if (isAccountLocked(user.lockedUntil)) {
+    await waitForFailedLoginDelay();
+    redirectWithError('/login', 'too_many_attempts');
   }
 
   let isValidPassword = false;
@@ -48,8 +71,24 @@ export async function loginAction(formData: FormData) {
   }
 
   if (!isValidPassword) {
+    const failedAttemptState = await recordFailedLoginAttempt({
+      userId: user.id,
+      lockoutThreshold: LOGIN_LOCKOUT_THRESHOLD,
+      lockoutDurationMinutes: LOGIN_LOCKOUT_DURATION_MINUTES,
+    }).catch(() => redirectWithError('/login', 'server_error'));
+
+    await waitForFailedLoginDelay();
+
+    if (isAccountLocked(failedAttemptState?.lockedUntil)) {
+      redirectWithError('/login', 'too_many_attempts');
+    }
+
     redirectWithError('/login', 'invalid_credentials');
   }
+
+  await resetFailedLoginAttempts(user.id).catch(() =>
+    redirectWithError('/login', 'server_error'),
+  );
 
   try {
     await createUserSession(user.id);

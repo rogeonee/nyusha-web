@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
 import {
   LogOut,
   Monitor,
@@ -14,6 +15,16 @@ import {
 import { logoutAction } from '@/app/(auth)/actions';
 import type { Chat } from '@/lib/db/schema';
 import { groupChatsByDate } from '@/lib/utils/chat-grouping';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +82,9 @@ export default function AppSidebar({
   const { setOpenMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [chatPendingDeleteId, setChatPendingDeleteId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -89,10 +103,14 @@ export default function AppSidebar({
     mutationFn: deleteChat,
     onSuccess: (deletedChatId) => {
       queryClient.invalidateQueries({ queryKey: ['chats'] });
+      toast.success('Чат удален.');
 
       if (pathname === `/chat/${deletedChatId}`) {
         router.push('/');
       }
+    },
+    onError: () => {
+      toast.error('Не удалось удалить чат. Попробуйте снова.');
     },
   });
 
@@ -105,28 +123,41 @@ export default function AppSidebar({
     setOpenMobile(false);
   };
 
-  const handleDeleteChat = (chatId: string) => {
-    deleteMutation.mutate(chatId);
+  const handleDeleteChatRequest = (chatId: string) => {
+    setChatPendingDeleteId(chatId);
+  };
+
+  const handleDeleteChatConfirm = () => {
+    if (!chatPendingDeleteId) {
+      return;
+    }
+
+    deleteMutation.mutate(chatPendingDeleteId, {
+      onSettled: () => setChatPendingDeleteId(null),
+    });
   };
 
   const groupedChats = groupChatsByDate(chats);
   const emailInitial = user.email.charAt(0).toUpperCase();
-  const effectiveTheme = mounted ? (theme ?? 'system') : 'system';
+  const effectiveTheme = mounted ? theme ?? 'system' : 'system';
   const ThemeIcon =
     effectiveTheme === 'dark'
       ? Moon
       : effectiveTheme === 'system'
-        ? Monitor
-        : Sun;
+      ? Monitor
+      : Sun;
   const themeLabel =
     effectiveTheme === 'dark'
       ? 'Тёмная'
       : effectiveTheme === 'system'
-        ? 'Системная'
-        : 'Светлая';
+      ? 'Системная'
+      : 'Светлая';
 
   return (
-    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0 bg-sidebar">
+    <Sidebar
+      collapsible="icon"
+      className="group-data-[side=left]:border-r-0 bg-sidebar"
+    >
       {/* Content */}
       <SidebarContent>
         {/* Expanded: grouped chat list — fades on collapse */}
@@ -185,7 +216,7 @@ export default function AppSidebar({
                             <DropdownMenuContent side="right" align="start">
                               <DropdownMenuItem
                                 disabled={isDeleting}
-                                onClick={() => handleDeleteChat(chat.id)}
+                                onClick={() => handleDeleteChatRequest(chat.id)}
                                 className="text-destructive focus:text-destructive"
                               >
                                 <Trash2 className="size-4" />
@@ -269,6 +300,36 @@ export default function AppSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>
+
+      <AlertDialog
+        open={chatPendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setChatPendingDeleteId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить чат?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Отмена
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteChatConfirm}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? 'Удаляем...' : 'Удалить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   );
 }

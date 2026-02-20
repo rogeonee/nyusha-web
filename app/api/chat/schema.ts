@@ -7,15 +7,17 @@ const messagePartSchema = z
   .loose();
 
 const messageSchema = z.object({
-  id: z.string().min(1),
-  role: z.enum(['system', 'user', 'assistant']),
+  id: z.string().min(1).max(200),
+  role: z.enum(['user', 'assistant']),
   parts: z.array(messagePartSchema),
 });
 
 export const postRequestBodySchema = z.object({
   id: z.uuid(),
   messages: z.array(messageSchema).min(1),
-  selectedChatModel: z.string(),
+  selectedChatModel: z.string().min(1),
+  trigger: z.enum(['submit-message', 'regenerate-message']),
+  messageId: z.string().min(1).max(200).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

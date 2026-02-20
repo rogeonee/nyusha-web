@@ -6,6 +6,8 @@ import { LoginForm } from './login-form';
 const loginErrorMessages: Record<string, string> = {
   invalid_data: 'Введите корректные email и пароль (минимум 8 символов).',
   invalid_credentials: 'Неверные email или пароль.',
+  too_many_attempts:
+    'Слишком много неудачных попыток. Попробуйте снова через 15 минут.',
   server_error: 'Ошибка входа. Проверь переменные окружения и базу данных.',
 };
 
