@@ -5,6 +5,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import { deleteTrailingMessages } from '@/app/(chat)/actions';
 import { ArrowUpIcon, XIcon } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -32,6 +33,8 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const offlineMessage =
+    'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
 
   useEffect(() => {
     const ta = ref.current;
@@ -45,6 +48,12 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
   const handleSend = async () => {
     const text = draft.trim();
     if (!text || submitting) return;
+
+    if (!navigator.onLine) {
+      setSubmitError(offlineMessage);
+      toast.error(offlineMessage);
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);

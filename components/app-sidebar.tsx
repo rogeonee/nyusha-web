@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
 import {
   LogOut,
   Monitor,
@@ -89,10 +90,14 @@ export default function AppSidebar({
     mutationFn: deleteChat,
     onSuccess: (deletedChatId) => {
       queryClient.invalidateQueries({ queryKey: ['chats'] });
+      toast.success('Чат удален.');
 
       if (pathname === `/chat/${deletedChatId}`) {
         router.push('/');
       }
+    },
+    onError: () => {
+      toast.error('Не удалось удалить чат. Попробуйте снова.');
     },
   });
 
@@ -106,27 +111,38 @@ export default function AppSidebar({
   };
 
   const handleDeleteChat = (chatId: string) => {
+    const shouldDelete = window.confirm(
+      'Удалить чат? Это действие нельзя отменить.',
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
     deleteMutation.mutate(chatId);
   };
 
   const groupedChats = groupChatsByDate(chats);
   const emailInitial = user.email.charAt(0).toUpperCase();
-  const effectiveTheme = mounted ? (theme ?? 'system') : 'system';
+  const effectiveTheme = mounted ? theme ?? 'system' : 'system';
   const ThemeIcon =
     effectiveTheme === 'dark'
       ? Moon
       : effectiveTheme === 'system'
-        ? Monitor
-        : Sun;
+      ? Monitor
+      : Sun;
   const themeLabel =
     effectiveTheme === 'dark'
       ? 'Тёмная'
       : effectiveTheme === 'system'
-        ? 'Системная'
-        : 'Светлая';
+      ? 'Системная'
+      : 'Светлая';
 
   return (
-    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0 bg-sidebar">
+    <Sidebar
+      collapsible="icon"
+      className="group-data-[side=left]:border-r-0 bg-sidebar"
+    >
       {/* Content */}
       <SidebarContent>
         {/* Expanded: grouped chat list — fades on collapse */}
