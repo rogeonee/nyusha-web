@@ -2,10 +2,21 @@ export const CHAT_MODEL_COOKIE_NAME = 'chat-model';
 
 export const chatModels = [
   {
+    id: 'google/gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro',
+    shortName: '3.1 Pro',
+    provider: 'google',
+    family: 'pro',
+    description: 'Latest Pro preview for the strongest reasoning quality',
+    sdkModelId: 'gemini-3.1-pro-preview',
+    thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
+  },
+  {
     id: 'google/gemini-3-pro-preview',
     name: 'Gemini 3.0 Pro',
     shortName: '3.0 Pro',
     provider: 'google',
+    family: 'pro',
     description: 'Most capable for complex questions and planning',
     sdkModelId: 'gemini-3-pro-preview',
     thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
@@ -15,6 +26,7 @@ export const chatModels = [
     name: 'Gemini 3.0 Flash',
     shortName: '3.0 Flash',
     provider: 'google',
+    family: 'flash',
     description: 'Latest Flash — fast, smart, and cost-effective',
     sdkModelId: 'gemini-3-flash-preview',
     thinkingConfig: { thinkingLevel: 'low', includeThoughts: true },
@@ -24,6 +36,7 @@ export const chatModels = [
     name: 'Gemini 2.5 Flash',
     shortName: '2.5 Flash',
     provider: 'google',
+    family: 'flash',
     description: 'Proven and efficient for everyday chats',
     sdkModelId: 'gemini-2.5-flash',
     thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
@@ -35,6 +48,7 @@ export type ChatModelId = ChatModel['id'];
 
 export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-2.5-flash';
 const PREVIEW_MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
+  'google/gemini-3.1-pro-preview': DEFAULT_CHAT_MODEL,
   'google/gemini-3-pro-preview': DEFAULT_CHAT_MODEL,
   'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
 };
