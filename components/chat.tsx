@@ -3,6 +3,7 @@
 import { Card } from '@/components/ui/card';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
+import { upload as uploadToBlob } from '@vercel/blob/client';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
@@ -48,7 +49,15 @@ const OFFLINE_ERROR_MESSAGE =
 const FILE_UPLOAD_ERROR_MESSAGE =
   'Не удалось загрузить файл. Попробуйте еще раз.';
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MEDIA_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'image/jpeg',
+  'image/png',
+] as const;
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
+type BlobAccessMode = 'private' | 'public';
 
 type PendingAttachment = {
   fileId: string;
@@ -150,6 +159,36 @@ function formatFileSize(sizeBytes: number) {
   }
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function sanitizeFilename(value: string) {
+  const normalized = value.trim().replace(/\s+/g, '-');
+  const cleaned = normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const collapsed = cleaned.replace(/-+/g, '-');
+  const clipped = collapsed.slice(0, 120);
+
+  return clipped.length > 0 ? clipped : 'file';
+}
+
+function buildStoragePath(chatId: string, filename: string) {
+  return `${chatId}/${Date.now()}-${crypto.randomUUID()}-${sanitizeFilename(
+    filename,
+  )}`;
+}
+
+function isAccessModeMismatchError(
+  error: unknown,
+  attemptedAccess: BlobAccessMode,
+) {
+  if (!error || typeof error !== 'object' || !('message' in error)) {
+    return false;
+  }
+
+  const message = String(error.message);
+
+  return attemptedAccess === 'public'
+    ? message.includes('Cannot use public access on a private store')
+    : message.includes('Cannot use private access on a public store');
 }
 
 export default function Chat({
@@ -384,25 +423,96 @@ export default function Chat({
         return;
       }
 
+      const oversizedFile = files.find(
+        (file) => file.size > MAX_UPLOAD_SIZE_BYTES,
+      );
+
+      if (oversizedFile) {
+        toast.error(
+          `Размер файла не должен превышать ${Math.floor(
+            MAX_UPLOAD_SIZE_BYTES / 1024 / 1024,
+          )} MB.`,
+        );
+        return;
+      }
+
       setIsUploading(true);
       setUploadError(null);
 
       try {
         const settledUploads = await Promise.allSettled(
           files.map(async (file) => {
-            const formData = new FormData();
-            formData.append('chatId', id);
-            formData.append('file', file);
+            if (
+              file.type &&
+              !ALLOWED_MEDIA_TYPES.includes(
+                file.type as (typeof ALLOWED_MEDIA_TYPES)[number],
+              )
+            ) {
+              throw new Error('Неподдерживаемый тип файла.');
+            }
+
+            const pathname = buildStoragePath(id, file.name);
+            const clientPayload = JSON.stringify({
+              chatId: id,
+              filename: file.name,
+              mediaType: file.type || undefined,
+            });
+
+            let blob:
+              | {
+                  pathname: string;
+                }
+              | undefined;
+
+            for (const access of ['private', 'public'] as const) {
+              try {
+                blob = await uploadToBlob(pathname, file, {
+                  access,
+                  handleUploadUrl: '/api/files/upload-token',
+                  clientPayload,
+                  multipart: file.size >= 8 * 1024 * 1024,
+                });
+                break;
+              } catch (uploadError) {
+                if (!isAccessModeMismatchError(uploadError, access)) {
+                  throw uploadError;
+                }
+              }
+            }
+
+            if (!blob) {
+              throw new Error(FILE_UPLOAD_ERROR_MESSAGE);
+            }
 
             const response = await fetch('/api/files/upload', {
               method: 'POST',
-              body: formData,
+              headers: {
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                chatId: id,
+                pathname: blob.pathname,
+                filename: file.name,
+              }),
             });
 
-            const data = await response.json();
+            let data: unknown = null;
+
+            try {
+              data = await response.json();
+            } catch {
+              data = null;
+            }
 
             if (!response.ok) {
-              throw new Error(data?.error ?? FILE_UPLOAD_ERROR_MESSAGE);
+              const message =
+                typeof data === 'object' &&
+                data !== null &&
+                'error' in data &&
+                typeof data.error === 'string'
+                  ? data.error
+                  : FILE_UPLOAD_ERROR_MESSAGE;
+              throw new Error(message);
             }
 
             return data as PendingAttachment;

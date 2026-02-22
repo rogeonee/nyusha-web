@@ -393,6 +393,30 @@ export async function getChatFileById({
   return file ?? null;
 }
 
+export async function getChatFileByStorageKeyForUserChat({
+  storageKey,
+  userId,
+  chatId,
+}: {
+  storageKey: string;
+  userId: string;
+  chatId: string;
+}) {
+  const db = getDb();
+  const [file] = await db
+    .select()
+    .from(chatFiles)
+    .where(
+      and(
+        eq(chatFiles.storageKey, storageKey),
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+      ),
+    );
+
+  return file ?? null;
+}
+
 export async function getChatFilesByIdsForUserChat({
   fileIds,
   userId,

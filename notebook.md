@@ -8,7 +8,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Next phase:** None scheduled. Non-Google providers deferred to a side track.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
-- **Uploads:** Phase A live: `/api/files/upload` stores bytes in Vercel Blob, metadata in `chat_files`, and links user message attachments via `message_file_attachments`.
+- **Uploads:** Phase A live with direct client upload: browser uses Vercel Blob client uploads via `/api/files/upload-token`; `/api/files/upload` now finalizes server-verified metadata in `chat_files` and chat route links attachments via `message_file_attachments`.
 - **Models:** Central registry in `lib/ai/models.ts` with Gemini-only options (3.1 Pro, 3.0 Pro, 3.0 Flash, 2.5 Flash). Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
 - **Model UX:** Compact picker in composer shows `shortName` in trigger, full names in dropdown grouped by `Pro` and `Flash`. Model choice is persisted per chat (`chats.model_id`), while `chat-model` cookie is only a default seed for brand-new chats.
 - **Reasoning:** Gemini thought summaries enabled for 3.x (`includeThoughts: true`, `thinkingLevel: 'high'`). 2.5 Flash is configured for cost-safe fallback (`thinkingBudget: 0`, `includeThoughts: false`). `sendReasoning` defaults to true in AI SDK.
@@ -38,6 +38,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Chat delete treats `BlobNotFoundError` as non-fatal so stale/missing blob keys do not block chat deletion.
 - Upload rollback now attempts immediate blob deletion if DB metadata insert fails after blob upload.
 - `/api/chat` now uses custom `experimental_download` for model file fetches, adding Blob auth headers for private blob URLs.
+- File uploads now bypass function body limits by uploading bytes directly from browser to Blob; `/api/files/upload` expects JSON finalize payload (`chatId`, `pathname`, `filename`) and no longer accepts multipart file bodies.
+- Upload finalize now treats `chat_files.storage_key` unique conflicts as idempotent retries and returns the existing row instead of deleting the blob.
 
 ## Decisions Log
 

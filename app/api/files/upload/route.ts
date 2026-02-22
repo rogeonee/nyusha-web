@@ -1,67 +1,35 @@
-import { randomUUID } from 'crypto';
-import { del, put } from '@vercel/blob';
+import { BlobNotFoundError, del, head } from '@vercel/blob';
 import { z } from 'zod';
-import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
-  createChatIfAbsent,
   createChatFile,
   getChatById,
+  getChatFileByStorageKeyForUserChat,
 } from '@/lib/db/queries';
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-type BlobAccessMode = 'private' | 'public';
 const ALLOWED_MEDIA_TYPES = [
   'application/pdf',
   'text/plain',
   'image/jpeg',
   'image/png',
 ] as const;
-const BLOB_ACCESS: BlobAccessMode =
-  process.env.BLOB_ACCESS === 'public' ? 'public' : 'private';
-
-const uploadSchema = z.object({
+const finalizeUploadSchema = z.object({
   chatId: z.uuid(),
-  file: z
-    .instanceof(Blob)
-    .refine((file) => file.size > 0, 'Файл пустой.')
-    .refine(
-      (file) => file.size <= MAX_UPLOAD_SIZE_BYTES,
-      `Размер файла не должен превышать ${Math.floor(
-        MAX_UPLOAD_SIZE_BYTES / 1024 / 1024,
-      )} MB.`,
-    )
-    .refine(
-      (file) =>
-        ALLOWED_MEDIA_TYPES.includes(
-          file.type as (typeof ALLOWED_MEDIA_TYPES)[number],
-        ),
-      'Неподдерживаемый тип файла.',
-    ),
+  pathname: z
+    .string()
+    .trim()
+    .min(1, 'Некорректный путь файла.')
+    .max(512, 'Некорректный путь файла.'),
+  filename: z.string().trim().min(1).max(255).optional(),
 });
 
-function sanitizeFilename(value: string) {
-  const normalized = value.trim().replace(/\s+/g, '-');
-  const cleaned = normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const collapsed = cleaned.replace(/-+/g, '-');
-  const clipped = collapsed.slice(0, 120);
-
-  return clipped.length > 0 ? clipped : 'file';
-}
-
-function isAccessModeMismatchError(
-  error: unknown,
-  attemptedAccess: BlobAccessMode,
-) {
-  if (!error || typeof error !== 'object' || !('message' in error)) {
-    return false;
-  }
-
-  const message = String(error.message);
-
-  return attemptedAccess === 'public'
-    ? message.includes('Cannot use public access on a private store')
-    : message.includes('Cannot use private access on a public store');
+function isPathnameOwnedByChat(pathname: string, chatId: string) {
+  return (
+    pathname.startsWith(`${chatId}/`) &&
+    !pathname.includes('..') &&
+    !pathname.includes('\\')
+  );
 }
 
 function isMissingTableError(error: unknown) {
@@ -84,39 +52,40 @@ function isMissingTableError(error: unknown) {
   return code === '42P01' && message.includes('chat_files');
 }
 
-async function putWithCompatibleAccess({
-  storageKey,
-  file,
-  blobToken,
-}: {
-  storageKey: string;
-  file: Blob;
-  blobToken: string;
-}) {
-  const attemptedAccess = BLOB_ACCESS;
-
-  try {
-    const blob = await put(storageKey, file, {
-      access: attemptedAccess,
-      addRandomSuffix: false,
-      token: blobToken,
-    });
-
-    return blob;
-  } catch (error) {
-    if (!isAccessModeMismatchError(error, attemptedAccess)) {
-      throw error;
-    }
-
-    const fallbackAccess: BlobAccessMode =
-      attemptedAccess === 'private' ? 'public' : 'private';
-
-    return put(storageKey, file, {
-      access: fallbackAccess,
-      addRandomSuffix: false,
-      token: blobToken,
-    });
+function isStorageKeyUniqueConflict(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
   }
+
+  const cause =
+    'cause' in error && typeof error.cause === 'object' && error.cause !== null
+      ? error.cause
+      : null;
+
+  if (!cause) {
+    return false;
+  }
+
+  const code = 'code' in cause ? String(cause.code) : '';
+  const constraint =
+    'constraint' in cause && typeof cause.constraint === 'string'
+      ? cause.constraint
+      : '';
+  const detail = 'detail' in cause ? String(cause.detail) : '';
+  const message = 'message' in cause ? String(cause.message) : '';
+
+  if (code !== '23505') {
+    return false;
+  }
+
+  if (constraint === 'chat_files_storage_key_unique_idx') {
+    return true;
+  }
+
+  return (
+    detail.includes('(storage_key)') ||
+    message.includes('chat_files_storage_key_unique_idx')
+  );
 }
 
 export async function POST(request: Request) {
@@ -138,58 +107,67 @@ export async function POST(request: Request) {
     );
   }
 
-  let formData: FormData;
+  let payload: unknown;
 
   try {
-    formData = await request.formData();
+    payload = await request.json();
   } catch {
     return Response.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  const parsed = uploadSchema.safeParse({
-    chatId: formData.get('chatId'),
-    file: formData.get('file'),
-  });
+  const parsed = finalizeUploadSchema.safeParse(payload);
 
   if (!parsed.success) {
     const message = parsed.error.issues[0]?.message ?? 'Bad request';
     return Response.json({ error: message }, { status: 400 });
   }
 
-  const { chatId, file } = parsed.data;
-  const uploadedFileName =
-    formData.get('file') instanceof File
-      ? (formData.get('file') as File).name
-      : 'upload.bin';
+  const { chatId, pathname, filename: requestedFilename } = parsed.data;
+  const uploadedFileName = requestedFilename?.trim() || 'upload.bin';
 
-  let chat = await getChatById(chatId);
+  const chat = await getChatById(chatId);
 
-  if (chat && chat.userId !== user.id) {
+  if (!chat || chat.userId !== user.id) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }
 
-  if (!chat) {
-    chat = await createChatIfAbsent({
-      id: chatId,
-      userId: user.id,
-      title: 'New Chat',
-      modelId: DEFAULT_CHAT_MODEL,
-    });
-
-    if (!chat || chat.userId !== user.id) {
-      return Response.json({ error: 'Not found' }, { status: 404 });
-    }
+  if (!isPathnameOwnedByChat(pathname, chatId)) {
+    return Response.json(
+      { error: 'Некорректный путь файла для этого чата.' },
+      { status: 400 },
+    );
   }
 
-  const safeName = sanitizeFilename(uploadedFileName);
-  const storageKey = `${chatId}/${Date.now()}-${randomUUID()}-${safeName}`;
-
   try {
-    const blob = await putWithCompatibleAccess({
-      storageKey,
-      file,
-      blobToken,
-    });
+    const blob = await head(pathname, { token: blobToken });
+
+    if (blob.size <= 0) {
+      return Response.json({ error: 'Файл пустой.' }, { status: 400 });
+    }
+
+    if (blob.size > MAX_UPLOAD_SIZE_BYTES) {
+      return Response.json(
+        {
+          error: `Размер файла не должен превышать ${Math.floor(
+            MAX_UPLOAD_SIZE_BYTES / 1024 / 1024,
+          )} MB.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !ALLOWED_MEDIA_TYPES.includes(
+        blob.contentType as (typeof ALLOWED_MEDIA_TYPES)[number],
+      )
+    ) {
+      return Response.json(
+        { error: 'Неподдерживаемый тип файла.' },
+        { status: 400 },
+      );
+    }
+
+    const canonicalName = uploadedFileName;
 
     let chatFile: Awaited<ReturnType<typeof createChatFile>>;
 
@@ -197,17 +175,36 @@ export async function POST(request: Request) {
       chatFile = await createChatFile({
         chatId,
         userId: user.id,
-        filename: uploadedFileName,
-        mediaType: file.type,
-        sizeBytes: file.size,
+        filename: canonicalName,
+        mediaType: blob.contentType,
+        sizeBytes: blob.size,
         storageProvider: 'vercel_blob',
-        storageKey: blob.pathname,
+        storageKey: pathname,
         storageUrl: blob.url,
         status: 'uploaded',
       });
     } catch (dbError) {
+      if (isStorageKeyUniqueConflict(dbError)) {
+        const existingFile = await getChatFileByStorageKeyForUserChat({
+          storageKey: pathname,
+          userId: user.id,
+          chatId,
+        });
+
+        if (existingFile) {
+          return Response.json({
+            fileId: existingFile.id,
+            filename: existingFile.filename,
+            mediaType: existingFile.mediaType,
+            sizeBytes: existingFile.sizeBytes,
+          });
+        }
+
+        return Response.json({ error: 'Upload conflict' }, { status: 409 });
+      }
+
       try {
-        await del(blob.pathname, { token: blobToken });
+        await del(pathname, { token: blobToken });
       } catch (cleanupError) {
         console.error('Upload rollback blob cleanup failed:', cleanupError);
       }
@@ -223,6 +220,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Upload failed:', error);
+    if (error instanceof BlobNotFoundError) {
+      return Response.json({ error: 'Файл не найден.' }, { status: 404 });
+    }
     if (isMissingTableError(error)) {
       return Response.json(
         {

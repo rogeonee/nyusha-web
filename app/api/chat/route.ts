@@ -69,14 +69,21 @@ async function downloadAssetsForModel(
 
   return Promise.all(
     requestedDownloads.map(async (requestedDownload) => {
-      if (requestedDownload.isUrlSupportedByModel) {
+      const isVercelBlobUrl = requestedDownload.url.hostname.endsWith(
+        '.blob.vercel-storage.com',
+      );
+      const isPrivateVercelBlobUrl = requestedDownload.url.hostname.endsWith(
+        '.private.blob.vercel-storage.com',
+      );
+
+      const shouldUseDirectUrlForModel =
+        requestedDownload.isUrlSupportedByModel && !isPrivateVercelBlobUrl;
+
+      if (shouldUseDirectUrlForModel) {
         return null;
       }
 
       const headers: HeadersInit = {};
-      const isVercelBlobUrl = requestedDownload.url.hostname.endsWith(
-        '.blob.vercel-storage.com',
-      );
 
       if (blobToken && isVercelBlobUrl) {
         headers.authorization = `Bearer ${blobToken}`;
