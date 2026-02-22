@@ -13,8 +13,10 @@ import {
   CheckIcon,
   ChevronRight,
   ClipboardIcon,
+  PaperclipIcon,
   PencilIcon,
   RotateCcwIcon,
+  XIcon,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
@@ -43,7 +45,17 @@ import {
 
 const OFFLINE_ERROR_MESSAGE =
   'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
+const FILE_UPLOAD_ERROR_MESSAGE =
+  'Не удалось загрузить файл. Попробуйте еще раз.';
+const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
+
+type PendingAttachment = {
+  fileId: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+};
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -128,6 +140,18 @@ function AssistantMessageActions({
   );
 }
 
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function Chat({
   id,
   initialMessages = [],
@@ -148,8 +172,14 @@ export default function Chat({
   const [isOnline, setIsOnline] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
   const sendTimeRef = useRef<number>(0);
   const router = useRouter();
@@ -281,6 +311,27 @@ export default function Chat({
       .map((part) => part.text)
       .join('');
 
+  const getMessageFiles = (message: UIMessage) =>
+    message.parts.flatMap((part) => {
+      if (part.type !== 'file') {
+        return [];
+      }
+
+      const fileId =
+        'fileId' in part && typeof part.fileId === 'string'
+          ? part.fileId
+          : null;
+      const filename = part.filename?.trim() || 'Файл';
+
+      return [
+        {
+          fileId,
+          filename,
+          mediaType: part.mediaType,
+        },
+      ];
+    });
+
   const getReasoningText = (message: UIMessage) =>
     message.parts
       .filter((part) => part.type === 'reasoning')
@@ -312,6 +363,101 @@ export default function Chat({
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, []);
 
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!isOnline) {
+        toast.error(OFFLINE_ERROR_MESSAGE);
+        return;
+      }
+
+      if (
+        pendingAttachments.length + files.length >
+        MAX_ATTACHMENTS_PER_MESSAGE
+      ) {
+        toast.error(
+          `Можно прикрепить не более ${MAX_ATTACHMENTS_PER_MESSAGE} файлов за сообщение.`,
+        );
+        return;
+      }
+
+      setIsUploading(true);
+      setUploadError(null);
+
+      try {
+        const settledUploads = await Promise.allSettled(
+          files.map(async (file) => {
+            const formData = new FormData();
+            formData.append('chatId', id);
+            formData.append('file', file);
+
+            const response = await fetch('/api/files/upload', {
+              method: 'POST',
+              body: formData,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data?.error ?? FILE_UPLOAD_ERROR_MESSAGE);
+            }
+
+            return data as PendingAttachment;
+          }),
+        );
+
+        const succeeded = settledUploads.flatMap((result) =>
+          result.status === 'fulfilled' ? [result.value] : [],
+        );
+        const failed = settledUploads
+          .filter((result) => result.status === 'rejected')
+          .map((result) =>
+            result.reason instanceof Error
+              ? result.reason.message
+              : FILE_UPLOAD_ERROR_MESSAGE,
+          );
+
+        if (succeeded.length > 0) {
+          setPendingAttachments((current) => [...current, ...succeeded]);
+        }
+
+        if (failed.length > 0) {
+          const message =
+            failed.length === 1
+              ? failed[0]
+              : `Не удалось загрузить ${failed.length} файла(ов).`;
+          setUploadError(message);
+          toast.error(message);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : FILE_UPLOAD_ERROR_MESSAGE;
+        setUploadError(message);
+        toast.error(message);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [id, isOnline, pendingAttachments.length],
+  );
+
+  const handleFilePickerChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(event.target.files ?? []);
+    event.currentTarget.value = '';
+    await uploadFiles(files);
+  };
+
+  const removePendingAttachment = (fileId: string) => {
+    setPendingAttachments((current) =>
+      current.filter((file) => file.fileId !== fileId),
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -320,15 +466,46 @@ export default function Chat({
       return;
     }
 
+    if (isUploading) {
+      return;
+    }
+
     const prompt = input.trim();
-    if (!prompt) return;
+    if (!prompt && pendingAttachments.length === 0) return;
 
     setRegenerateError(null);
+    setUploadError(null);
+    const attachmentsForMessage = [...pendingAttachments];
     setInput('');
+    setPendingAttachments([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    void sendMessage({ text: prompt });
+
+    const parts: Array<
+      | { type: 'text'; text: string }
+      | {
+          type: 'file';
+          url: string;
+          mediaType: string;
+          filename: string;
+          fileId: string;
+        }
+    > = [
+      ...attachmentsForMessage.map((file) => ({
+        type: 'file' as const,
+        url: file.fileId,
+        mediaType: file.mediaType,
+        filename: file.filename,
+        fileId: file.fileId,
+      })),
+      ...(prompt ? [{ type: 'text' as const, text: prompt }] : []),
+    ];
+
+    void sendMessage({
+      role: 'user',
+      parts: parts as UIMessage['parts'],
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -337,6 +514,10 @@ export default function Chat({
 
       if (!isOnline) {
         toast.error(OFFLINE_ERROR_MESSAGE);
+        return;
+      }
+
+      if (isUploading) {
         return;
       }
 
@@ -396,8 +577,16 @@ export default function Chat({
               <div className="mt-10 w-full">
                 {messages.map((message) => {
                   const text = getMessageText(message);
+                  const files = getMessageFiles(message);
+                  const hasText = text.trim().length > 0;
 
-                  if (message.role === 'assistant' && !text) return null;
+                  if (
+                    message.role === 'assistant' &&
+                    !hasText &&
+                    files.length === 0
+                  ) {
+                    return null;
+                  }
 
                   const reasoning =
                     message.role === 'assistant'
@@ -448,6 +637,21 @@ export default function Chat({
                             {reasoning ? (
                               <ReasoningBlock text={reasoning} />
                             ) : null}
+                            {files.length > 0 ? (
+                              <div className="mb-2 flex flex-wrap gap-1.5">
+                                {files.map((file, index) => (
+                                  <div
+                                    key={`${message.id}-file-${index}`}
+                                    className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
+                                  >
+                                    <PaperclipIcon className="size-3" />
+                                    <span className="truncate max-w-[200px]">
+                                      {file.filename}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                             {message.role === 'assistant' ? (
                               <Streamdown
                                 className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
@@ -464,7 +668,8 @@ export default function Chat({
 
                       {message.role === 'user' &&
                         !isAwaitingResponse &&
-                        !isEditing && (
+                        !isEditing &&
+                        hasText && (
                           <UserMessageActions
                             text={text}
                             onEdit={() => setEditingMessageId(message.id)}
@@ -564,7 +769,62 @@ export default function Chat({
                   onModelChange={setCurrentModelId}
                 />
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.txt,image/jpeg,image/png"
+                multiple
+                onChange={(event) => {
+                  void handleFilePickerChange(event);
+                }}
+              />
+              {pendingAttachments.length > 0 ? (
+                <div className="flex flex-wrap gap-1 px-1">
+                  {pendingAttachments.map((file) => (
+                    <div
+                      key={file.fileId}
+                      className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-secondary/80 px-2 py-1 text-xs text-muted-foreground"
+                    >
+                      <PaperclipIcon className="size-3" />
+                      <span className="max-w-[200px] truncate">
+                        {file.filename}
+                      </span>
+                      <span className="text-muted-foreground/70">
+                        {formatFileSize(file.sizeBytes)}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 transition-colors hover:bg-background"
+                        onClick={() => removePendingAttachment(file.fileId)}
+                        title="Удалить вложение"
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {isUploading ? (
+                <p className="px-1 text-xs text-muted-foreground">
+                  Загружаем файлы...
+                </p>
+              ) : null}
+              {uploadError ? (
+                <p className="px-1 text-xs text-destructive">{uploadError}</p>
+              ) : null}
               <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mr-1 mb-0.5"
+                  disabled={!isOnline || isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Прикрепить файл"
+                >
+                  <PaperclipIcon className="size-4" />
+                </Button>
                 <Textarea
                   ref={textareaRef}
                   value={input}
@@ -589,7 +849,11 @@ export default function Chat({
                 ) : (
                   <Button
                     type="submit"
-                    disabled={!input.trim() || !isOnline}
+                    disabled={
+                      (!input.trim() && pendingAttachments.length === 0) ||
+                      !isOnline ||
+                      isUploading
+                    }
                     className="mb-0.5"
                   >
                     <IconArrowUp />

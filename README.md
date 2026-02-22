@@ -35,6 +35,8 @@ pnpm dev
 - `POSTGRES_URL`
 - `GOOGLE_GENERATIVE_AI_API_KEY`
 - `AI_GATEWAY_API_KEY`
+- `BLOB_READ_WRITE_TOKEN`
+- `BLOB_ACCESS` (optional: `private` default, or `public`)
 - `FAMILY_ALLOWED_EMAILS` (comma-separated invite list)
 
 ## Scripts

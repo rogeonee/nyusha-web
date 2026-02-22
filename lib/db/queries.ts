@@ -16,7 +16,9 @@ import { DEFAULT_CHAT_MODEL, type ChatModelId } from '@/lib/ai/models';
 import { getDb } from '@/lib/db';
 import {
   assistantGenerationReservations,
+  chatFiles,
   chats,
+  messageFileAttachments,
   messages,
   sessions,
   users,
@@ -177,6 +179,32 @@ export async function createChat({
   return chat;
 }
 
+export async function createChatIfAbsent({
+  id,
+  userId,
+  title,
+  modelId = DEFAULT_CHAT_MODEL,
+}: {
+  id: string;
+  userId: string;
+  title: string;
+  modelId?: ChatModelId;
+}) {
+  const db = getDb();
+  const [inserted] = await db
+    .insert(chats)
+    .values({ id, userId, title, modelId })
+    .onConflictDoNothing()
+    .returning();
+
+  if (inserted) {
+    return inserted;
+  }
+
+  const [chat] = await db.select().from(chats).where(eq(chats.id, id));
+  return chat ?? null;
+}
+
 export async function getChatById(chatId: string) {
   const db = getDb();
   const [chat] = await db.select().from(chats).where(eq(chats.id, chatId));
@@ -195,6 +223,23 @@ export async function getChatsByUserId(userId: string) {
 export async function deleteChatById(chatId: string) {
   const db = getDb();
   await db.delete(chats).where(eq(chats.id, chatId));
+}
+
+export async function updateChatTitleById({
+  chatId,
+  title,
+}: {
+  chatId: string;
+  title: string;
+}) {
+  const db = getDb();
+  const [chat] = await db
+    .update(chats)
+    .set({ title })
+    .where(eq(chats.id, chatId))
+    .returning();
+
+  return chat ?? null;
 }
 
 export async function updateChatModelById({
@@ -236,6 +281,177 @@ export async function saveMessageIfAbsent(msg: {
     .returning({ id: messages.id });
 
   return inserted.length > 0;
+}
+
+export async function saveUserMessageWithAttachmentsIfAbsent({
+  messageId,
+  chatId,
+  parts,
+  fileIds,
+}: {
+  messageId: string;
+  chatId: string;
+  parts: unknown;
+  fileIds: string[];
+}) {
+  const db = getDb();
+
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(messages)
+      .values({
+        id: messageId,
+        chatId,
+        role: 'user',
+        parts,
+      })
+      .onConflictDoNothing()
+      .returning({ id: messages.id });
+
+    if (inserted.length === 0) {
+      return { inserted: false as const };
+    }
+
+    if (fileIds.length > 0) {
+      await tx
+        .insert(messageFileAttachments)
+        .values(
+          fileIds.map((fileId) => ({
+            messageId,
+            chatId,
+            fileId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+
+    return { inserted: true as const };
+  });
+}
+
+export async function createChatFile({
+  chatId,
+  userId,
+  filename,
+  mediaType,
+  sizeBytes,
+  storageProvider,
+  storageKey,
+  storageUrl,
+  status = 'uploaded',
+}: {
+  chatId: string;
+  userId: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+  storageProvider: string;
+  storageKey: string;
+  storageUrl: string;
+  status?: string;
+}) {
+  const db = getDb();
+  const [file] = await db
+    .insert(chatFiles)
+    .values({
+      chatId,
+      userId,
+      filename,
+      mediaType,
+      sizeBytes,
+      storageProvider,
+      storageKey,
+      storageUrl,
+      status,
+    })
+    .returning();
+
+  return file;
+}
+
+export async function getChatFileById({
+  fileId,
+  userId,
+  chatId,
+}: {
+  fileId: string;
+  userId: string;
+  chatId: string;
+}) {
+  const db = getDb();
+  const [file] = await db
+    .select()
+    .from(chatFiles)
+    .where(
+      and(
+        eq(chatFiles.id, fileId),
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+      ),
+    );
+
+  return file ?? null;
+}
+
+export async function getChatFilesByIdsForUserChat({
+  fileIds,
+  userId,
+  chatId,
+}: {
+  fileIds: string[];
+  userId: string;
+  chatId: string;
+}) {
+  if (fileIds.length === 0) {
+    return [];
+  }
+
+  const db = getDb();
+  return db
+    .select()
+    .from(chatFiles)
+    .where(
+      and(
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+        inArray(chatFiles.id, fileIds),
+      ),
+    );
+}
+
+export async function getChatFilesByChatId(chatId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(chatFiles)
+    .where(eq(chatFiles.chatId, chatId))
+    .orderBy(asc(chatFiles.createdAt));
+}
+
+export async function attachFilesToMessage({
+  messageId,
+  chatId,
+  fileIds,
+}: {
+  messageId: string;
+  chatId: string;
+  fileIds: string[];
+}) {
+  if (fileIds.length === 0) {
+    return;
+  }
+
+  const db = getDb();
+  await db
+    .insert(messageFileAttachments)
+    .values(
+      fileIds.map((fileId) => ({
+        messageId,
+        chatId,
+        fileId,
+      })),
+    )
+    .onConflictDoNothing();
 }
 
 export type DeleteMessageTailForUserResult =

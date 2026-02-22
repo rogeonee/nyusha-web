@@ -43,6 +43,13 @@
       "when": 1771482675909,
       "tag": "0005_steep_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771752980196,
+      "tag": "0006_steep_multiple_man",
+      "breakpoints": true
     }
   ]
 }

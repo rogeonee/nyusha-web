@@ -70,9 +70,16 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
         const idx = msgs.findIndex((m) => m.id === message.id);
         if (idx === -1) return msgs;
 
+        const preservedFileParts = message.parts.filter(
+          (part) => part.type === 'file',
+        );
+
         return [
           ...msgs.slice(0, idx),
-          { ...message, parts: [{ type: 'text', text }] } as UI_MESSAGE,
+          {
+            ...message,
+            parts: [...preservedFileParts, { type: 'text', text }],
+          } as UI_MESSAGE,
         ];
       });
 

@@ -6,6 +6,7 @@ import {
   type UIMessage,
 } from 'ai';
 import { google } from '@ai-sdk/google';
+import { BlobNotFoundError, del } from '@vercel/blob';
 import {
   getChatModelById,
   getFallbackChatModelId,
@@ -16,15 +17,19 @@ import {
 import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import {
+  attachFilesToMessage,
   createChat,
   deleteChatById,
   getChatById,
+  getChatFilesByChatId,
+  getChatFilesByIdsForUserChat,
   getMessageByIdAndChatId,
   getMessagesByChatId,
   releaseAssistantGenerationSlot,
   reserveAssistantGenerationSlot,
-  saveMessageIfAbsent,
   saveMessages,
+  saveUserMessageWithAttachmentsIfAbsent,
+  updateChatTitleById,
   updateChatModelById,
 } from '@/lib/db/queries';
 import { type PostRequestBody, postRequestBodySchema } from './schema';
@@ -40,6 +45,58 @@ const DUPLICATE_MESSAGE_ERROR =
 const CHAT_CONFLICT_ERROR =
   'Состояние чата изменилось. Обновите страницу и повторите попытку.';
 const INVALID_USER_MESSAGE_ERROR = 'Некорректное пользовательское сообщение.';
+const INVALID_FILE_ERROR =
+  'Некорректный файл. Загрузите файл заново и повторите попытку.';
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isBlobNotFoundError(error: unknown) {
+  if (error instanceof BlobNotFoundError) {
+    return true;
+  }
+
+  if (typeof error === 'object' && error !== null && 'name' in error) {
+    return error.name === 'BlobNotFoundError';
+  }
+
+  return false;
+}
+
+async function downloadAssetsForModel(
+  requestedDownloads: Array<{ url: URL; isUrlSupportedByModel: boolean }>,
+) {
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+
+  return Promise.all(
+    requestedDownloads.map(async (requestedDownload) => {
+      if (requestedDownload.isUrlSupportedByModel) {
+        return null;
+      }
+
+      const headers: HeadersInit = {};
+      const isVercelBlobUrl = requestedDownload.url.hostname.endsWith(
+        '.blob.vercel-storage.com',
+      );
+
+      if (blobToken && isVercelBlobUrl) {
+        headers.authorization = `Bearer ${blobToken}`;
+      }
+
+      const response = await fetch(requestedDownload.url, { headers });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download file for model context (${response.status})`,
+        );
+      }
+
+      return {
+        data: new Uint8Array(await response.arrayBuffer()),
+        mediaType: response.headers.get('content-type') ?? undefined,
+      };
+    }),
+  );
+}
 
 function extractMessageText(message: UIMessage): string {
   return message.parts
@@ -53,37 +110,160 @@ function extractMessageText(message: UIMessage): string {
     .join('');
 }
 
-function extractTextFromStoredParts(parts: unknown): string {
+type CanonicalUserPart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'file';
+      url: string;
+      mediaType: string;
+      filename: string;
+      fileId: string;
+    };
+
+function normalizeUserParts(
+  parts: unknown,
+): Array<{ type: 'text'; text: string } | { type: 'file'; fileId: string }> {
   if (!Array.isArray(parts)) {
-    return '';
+    return [];
   }
 
-  return parts
-    .map((part) => {
-      if (
-        typeof part === 'object' &&
-        part !== null &&
-        'type' in part &&
-        'text' in part &&
-        part.type === 'text' &&
-        typeof part.text === 'string'
-      ) {
-        return part.text;
-      }
+  const normalized: Array<
+    { type: 'text'; text: string } | { type: 'file'; fileId: string }
+  > = [];
 
-      return '';
-    })
-    .join('');
+  for (const part of parts) {
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      part.type === 'text' &&
+      'text' in part &&
+      typeof part.text === 'string'
+    ) {
+      normalized.push({ type: 'text', text: part.text });
+      continue;
+    }
+
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      part.type === 'file' &&
+      'fileId' in part &&
+      typeof part.fileId === 'string' &&
+      UUID_REGEX.test(part.fileId)
+    ) {
+      normalized.push({ type: 'file', fileId: part.fileId });
+    }
+  }
+
+  return normalized;
 }
 
-function getCanonicalUserParts(message: UIMessage) {
-  const text = extractMessageText(message);
+async function getCanonicalUserPayload({
+  message,
+  userId,
+  chatId,
+}: {
+  message: UIMessage;
+  userId: string;
+  chatId: string;
+}) {
+  const now = new Date();
+  const fileIds: string[] = [];
 
-  if (!text.trim()) {
-    return null;
+  for (const part of message.parts) {
+    if (part.type !== 'file') {
+      continue;
+    }
+
+    if (
+      !('fileId' in part) ||
+      typeof part.fileId !== 'string' ||
+      !UUID_REGEX.test(part.fileId)
+    ) {
+      return { error: INVALID_FILE_ERROR };
+    }
+
+    fileIds.push(part.fileId);
   }
 
-  return [{ type: 'text' as const, text }];
+  const uniqueFileIds = [...new Set(fileIds)];
+  const ownedFiles = await getChatFilesByIdsForUserChat({
+    fileIds: uniqueFileIds,
+    userId,
+    chatId,
+  });
+  const filesById = new Map(ownedFiles.map((file) => [file.id, file]));
+
+  if (ownedFiles.length !== uniqueFileIds.length) {
+    return { error: INVALID_FILE_ERROR };
+  }
+
+  const parts: CanonicalUserPart[] = [];
+
+  for (const part of message.parts) {
+    if (part.type === 'text') {
+      if (typeof part.text !== 'string') {
+        return { error: INVALID_USER_MESSAGE_ERROR };
+      }
+
+      if (part.text.trim().length === 0) {
+        continue;
+      }
+
+      parts.push({ type: 'text', text: part.text });
+      continue;
+    }
+
+    if (
+      part.type === 'file' &&
+      'fileId' in part &&
+      typeof part.fileId === 'string' &&
+      UUID_REGEX.test(part.fileId)
+    ) {
+      const file = filesById.get(part.fileId);
+
+      if (!file) {
+        return { error: INVALID_FILE_ERROR };
+      }
+
+      parts.push({
+        type: 'file',
+        url:
+          file.geminiFileUri &&
+          file.geminiFileExpiresAt &&
+          file.geminiFileExpiresAt > now
+            ? file.geminiFileUri
+            : file.storageUrl,
+        mediaType: file.mediaType,
+        filename: file.filename,
+        fileId: file.id,
+      });
+      continue;
+    }
+
+    if (part.type === 'file') {
+      return { error: INVALID_FILE_ERROR };
+    }
+  }
+
+  if (parts.length === 0) {
+    return { error: INVALID_USER_MESSAGE_ERROR };
+  }
+
+  const text = parts
+    .filter(
+      (part): part is { type: 'text'; text: string } => part.type === 'text',
+    )
+    .map((part) => part.text)
+    .join('');
+
+  return {
+    parts,
+    uniqueFileIds,
+    text,
+  };
 }
 
 export async function POST(request: Request) {
@@ -131,14 +311,18 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  const canonicalUserParts = getCanonicalUserParts(lastUserMessage);
+  const canonicalPayload = await getCanonicalUserPayload({
+    message: lastUserMessage,
+    userId: user.id,
+    chatId: id,
+  });
 
-  if (!canonicalUserParts) {
-    return Response.json(
-      { error: INVALID_USER_MESSAGE_ERROR },
-      { status: 400 },
-    );
+  if ('error' in canonicalPayload) {
+    return Response.json({ error: canonicalPayload.error }, { status: 400 });
   }
+  const canonicalUserParts = canonicalPayload.parts;
+  const attachedFileIds = canonicalPayload.uniqueFileIds;
+  const userMessageText = canonicalPayload.text;
 
   // Ensure chat exists — create on first message
   let chat = await getChatById(id);
@@ -156,6 +340,13 @@ export async function POST(request: Request) {
       userId: user.id,
       title,
       modelId: requestedModelId,
+    });
+  }
+
+  if (chat.title === 'New Chat' && userMessageText.trim().length > 0) {
+    await updateChatTitleById({
+      chatId: id,
+      title: userMessageText.slice(0, 100),
     });
   }
 
@@ -182,14 +373,14 @@ export async function POST(request: Request) {
       return Response.json({ error: DUPLICATE_MESSAGE_ERROR }, { status: 409 });
     }
 
-    const inserted = await saveMessageIfAbsent({
-      id: lastUserMessage.id,
+    const result = await saveUserMessageWithAttachmentsIfAbsent({
+      messageId: lastUserMessage.id,
       chatId: id,
-      role: 'user',
       parts: canonicalUserParts,
+      fileIds: attachedFileIds,
     });
 
-    if (!inserted) {
+    if (!result.inserted) {
       return Response.json({ error: DUPLICATE_MESSAGE_ERROR }, { status: 409 });
     }
   } else {
@@ -198,21 +389,29 @@ export async function POST(request: Request) {
         return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
       }
 
-      const storedText = extractTextFromStoredParts(existingUserMessage.parts);
-      const incomingText = canonicalUserParts.map((part) => part.text).join('');
+      const storedNormalized = normalizeUserParts(existingUserMessage.parts);
+      const incomingNormalized = normalizeUserParts(canonicalUserParts);
 
-      if (storedText !== incomingText) {
+      if (
+        JSON.stringify(storedNormalized) !== JSON.stringify(incomingNormalized)
+      ) {
         return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
       }
-    } else {
-      const inserted = await saveMessageIfAbsent({
-        id: lastUserMessage.id,
+
+      await attachFilesToMessage({
+        messageId: lastUserMessage.id,
         chatId: id,
-        role: 'user',
+        fileIds: attachedFileIds,
+      });
+    } else {
+      const result = await saveUserMessageWithAttachmentsIfAbsent({
+        messageId: lastUserMessage.id,
+        chatId: id,
         parts: canonicalUserParts,
+        fileIds: attachedFileIds,
       });
 
-      if (!inserted) {
+      if (!result.inserted) {
         return Response.json({ error: CHAT_CONFLICT_ERROR }, { status: 409 });
       }
     }
@@ -256,6 +455,7 @@ export async function POST(request: Request) {
             providerOptions: {
               google: { thinkingConfig: chatModel.thinkingConfig },
             },
+            experimental_download: downloadAssetsForModel,
           }),
         };
       };
@@ -335,6 +535,38 @@ export async function DELETE(request: Request) {
 
   if (!chat || chat.userId !== user.id) {
     return Response.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const files = await getChatFilesByChatId(chatId);
+
+  if (files.length > 0) {
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+
+    if (!blobToken) {
+      return Response.json(
+        {
+          error:
+            'Удаление файлов недоступно: отсутствует BLOB_READ_WRITE_TOKEN.',
+        },
+        { status: 500 },
+      );
+    }
+
+    for (const file of files) {
+      try {
+        await del(file.storageKey, { token: blobToken });
+      } catch (error) {
+        if (isBlobNotFoundError(error)) {
+          continue;
+        }
+
+        console.error('Blob cleanup failed:', error);
+        return Response.json(
+          { error: 'Не удалось удалить файлы чата. Попробуйте снова.' },
+          { status: 500 },
+        );
+      }
+    }
   }
 
   await deleteChatById(chatId);
