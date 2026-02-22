@@ -4,9 +4,9 @@ This file defines project-specific operating guidance for coding agents working 
 
 ## Source of Truth
 
-1. Upgrade scope and sequence: `/Users/rogeonee/Development/projects/nyusha-web/UPGRADE_PLAN.md`
-2. Agent working notes (private, implementation scratchpad): `/Users/rogeonee/Development/projects/nyusha-web/notebook.md`
-3. Legacy reference implementation to borrow patterns from only: `/Users/rogeonee/Development/projects/nyusha-web/ai-chatbot`
+1. Agent working notes (private, implementation scratchpad): `/Users/rogeonee/Development/projects/nyusha-web/notebook.md`
+2. Legacy reference implementation to borrow patterns from only: `/Users/rogeonee/Development/projects/nyusha-web/ai-chatbot`
+3. Existing production app behavior and constraints in this repo are the default baseline; do not replace the root app.
 
 ## Hard Project Constraints
 
@@ -33,22 +33,17 @@ This file defines project-specific operating guidance for coding agents working 
 
 ## Data and Persistence Rules
 
-1. Use minimal schema only: users, sessions, chats, messages.
-2. Persist user and assistant messages for each chat.
-3. Keep database layer simple and explicit; avoid premature abstraction.
-4. Write reversible migrations and keep schema changes small per PR.
+1. Keep schema and DB layer lean and explicit.
+2. Persist user and assistant messages per chat.
+3. Keep migrations small and reversible.
+4. Avoid premature database abstractions.
 
-## Implementation Priorities
+## Maintenance Priorities
 
-1. Complete phases in order from `UPGRADE_PLAN.md`.
-2. Finish streaming migration before auth and DB wiring.
-3. Add tests/smoke checks for each phase before moving forward.
-4. If a phase reveals unexpected breakage, document it in `notebook.md` and resolve before adding new features.
-
-## Practical Working Style
-
-1. Keep diffs focused and avoid cross-cutting refactors not tied to current phase.
-2. Use `notebook.md` as described below.
+1. Protect working production behavior first: auth, streaming, persistence, model routing.
+2. Add or run relevant tests/smoke checks for every behavior you change.
+3. Document non-obvious risks and decisions in `notebook.md`.
+4. Resolve regressions before expanding scope.
 
 ## notebook.md Usage Rules
 
@@ -56,18 +51,18 @@ This file defines project-specific operating guidance for coding agents working 
 
 **Structure (maintain these sections):**
 
-1. **Current State** — Quick orientation: what's done, what's next, stack summary. Update this after every phase or major task completes.
-2. **Active Risks and Gotchas** — Non-obvious things that will bite the next agent. Remove entries once resolved.
-3. **Decisions Log** — Non-obvious technical choices and *why*. Remove entries once they're no longer relevant (e.g., the code is self-explanatory or the decision is superseded).
+1. **Current State** — Quick orientation (done/next/stack summary).
+2. **Active Risks and Gotchas** — Non-obvious issues likely to surprise the next agent.
+3. **Decisions Log** — Non-obvious technical choices and rationale.
 
 **Rules:**
 
 - Do NOT record "what changed" file lists — git history covers that.
 - Do NOT create per-session or per-date entries — update the existing sections in place.
 - Do NOT duplicate information obvious from the code itself.
-- DO add a risk/gotcha when you hit something surprising that isn't visible in code.
-- DO add a decision entry when you choose between non-obvious alternatives.
-- DO prune aggressively: after a phase ships, collapse its details into the "Current State" one-liner and remove resolved risks.
+- DO add risks/gotchas that are not visible directly in code.
+- DO add decisions when tradeoffs are non-obvious.
+- DO prune resolved notes aggressively.
 
 ## Quick Validation Checklist
 
