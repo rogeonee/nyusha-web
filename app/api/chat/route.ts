@@ -29,7 +29,7 @@ import {
 } from '@/lib/db/queries';
 import { type PostRequestBody, postRequestBodySchema } from './schema';
 
-export const maxDuration = 90;
+export const maxDuration = 300;
 const DAILY_ASSISTANT_MESSAGE_LIMIT = 200;
 const DAILY_LIMIT_WINDOW_HOURS = 24;
 const ASSISTANT_RESERVATION_TTL_MINUTES = 5;

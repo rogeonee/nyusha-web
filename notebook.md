@@ -27,7 +27,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Chat title is set once from first user message and never updated.
 - `EnvCard` warning banner is no longer visible after global header removal; relocate if still needed.
 - `useChat` status values are `submitted | streaming | ready | error` (not `idle`); plan docs used wrong value.
-- `/api/chat` `maxDuration` is 90s. If timeouts still occur, increase further or reduce generation length.
+- `/api/chat` `maxDuration` is 300s (5 minutes). If timeouts still occur, reduce generation length or investigate provider-side latency.
 - Thinking tokens are billed even though only summaries are returned. If costs spike, lower `thinkingBudget`/`thinkingLevel` in `lib/ai/models.ts`.
 - `/api/chat` now rebuilds model context from persisted DB messages and can return `409` on client/DB divergence; client should refresh state before retrying.
 - Daily limiting now counts persisted assistant replies (completed generations). Aborted/failed generations before `onFinish` are not counted.
