@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import {
   CHAT_MODEL_COOKIE_NAME,
@@ -33,6 +34,12 @@ export function ChatModelSelector({
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const selectedModel = getChatModelById(selectedModelId);
   const compareByVersion = (a: ChatModel, b: ChatModel) =>
     Number.parseFloat(a.shortName) - Number.parseFloat(b.shortName);
@@ -64,6 +71,21 @@ export function ChatModelSelector({
         ) : null}
       </DropdownMenuItem>
     ));
+
+  if (!mounted) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 max-w-[230px] justify-between px-2 text-xs sm:text-sm"
+        disabled
+      >
+        <span className="truncate">{selectedModel.shortName}</span>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>

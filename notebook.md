@@ -63,3 +63,4 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **Attachment write atomicity:** User message insert + message-file linkage insert now happen in one DB transaction for first-write paths.
 - **Blob access mode:** Upload route defaults to private access and auto-falls back to public if the connected Blob store requires it (`BLOB_ACCESS` can override default).
 - **Phase B reuse strategy:** Persisted message parts remain Blob-canonical; Gemini file URIs are used only at runtime model assembly so history stays provider-agnostic and tamper-resistant.
+- **Hydration stability:** `ChatModelSelector` now renders a non-Radix fallback until mount to avoid SSR/client Radix `useId` drift causing hydration warnings in Next 16/Turbopack.
