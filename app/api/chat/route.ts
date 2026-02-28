@@ -78,40 +78,11 @@ const GEMINI_FILES_POLL_TIMEOUT_MS = Number.parseInt(
 );
 const GEMINI_FILE_DEFAULT_TTL_MS = 47 * 60 * 60 * 1000;
 
-function isBlobNotFoundError(error: unknown) {
-  if (error instanceof BlobNotFoundError) {
-    return true;
-  }
-
-  if (typeof error === 'object' && error !== null && 'name' in error) {
-    return error.name === 'BlobNotFoundError';
-  }
-
-  return false;
-}
-
-function readPositiveEnvNumber(value: number, fallback: number) {
-  if (Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
-  return fallback;
-}
-
 const GEMINI_FILES_REFRESH_SKEW_MS =
-  readPositiveEnvNumber(GEMINI_FILES_REFRESH_SKEW_MINUTES, 10) * 60 * 1000;
-const GEMINI_FILES_REFRESH_LIMIT = readPositiveEnvNumber(
-  GEMINI_FILES_REFRESH_MAX_PER_REQUEST,
-  6,
-);
-const GEMINI_FILES_UPLOAD_TIMEOUT = readPositiveEnvNumber(
-  GEMINI_FILES_UPLOAD_TIMEOUT_MS,
-  30_000,
-);
-const GEMINI_FILES_POLL_TIMEOUT = readPositiveEnvNumber(
-  GEMINI_FILES_POLL_TIMEOUT_MS,
-  20_000,
-);
+  GEMINI_FILES_REFRESH_SKEW_MINUTES * 60 * 1000;
+const GEMINI_FILES_REFRESH_LIMIT = GEMINI_FILES_REFRESH_MAX_PER_REQUEST;
+const GEMINI_FILES_UPLOAD_TIMEOUT = GEMINI_FILES_UPLOAD_TIMEOUT_MS;
+const GEMINI_FILES_POLL_TIMEOUT = GEMINI_FILES_POLL_TIMEOUT_MS;
 
 function isUuid(value: string) {
   return UUID_REGEX.test(value);
@@ -458,7 +429,7 @@ async function hydrateMessagesForModelContext({
         url: runtimeUrl,
         mediaType: file.mediaType,
         filename: file.filename,
-      } as unknown as UIMessage['parts'][number]);
+      } as UIMessage['parts'][number]);
     }
 
     if (hydratedParts.length === 0) {
@@ -1043,7 +1014,7 @@ export async function DELETE(request: Request) {
       try {
         await del(file.storageKey, { token: blobToken });
       } catch (error) {
-        if (isBlobNotFoundError(error)) {
+        if (error instanceof BlobNotFoundError) {
           continue;
         }
 

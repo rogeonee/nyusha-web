@@ -32,26 +32,6 @@ function isPathnameOwnedByChat(pathname: string, chatId: string) {
   );
 }
 
-function isMissingTableError(error: unknown) {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const cause =
-    'cause' in error && typeof error.cause === 'object' && error.cause !== null
-      ? error.cause
-      : null;
-
-  if (!cause) {
-    return false;
-  }
-
-  const code = 'code' in cause ? String(cause.code) : '';
-  const message = 'message' in cause ? String(cause.message) : '';
-
-  return code === '42P01' && message.includes('chat_files');
-}
-
 function isStorageKeyUniqueConflict(error: unknown) {
   if (!error || typeof error !== 'object') {
     return false;
@@ -167,15 +147,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const canonicalName = uploadedFileName;
-
     let chatFile: Awaited<ReturnType<typeof createChatFile>>;
 
     try {
       chatFile = await createChatFile({
         chatId,
         userId: user.id,
-        filename: canonicalName,
+        filename: uploadedFileName,
         mediaType: blob.contentType,
         sizeBytes: blob.size,
         storageProvider: 'vercel_blob',
@@ -222,15 +200,6 @@ export async function POST(request: Request) {
     console.error('Upload failed:', error);
     if (error instanceof BlobNotFoundError) {
       return Response.json({ error: 'Файл не найден.' }, { status: 404 });
-    }
-    if (isMissingTableError(error)) {
-      return Response.json(
-        {
-          error:
-            'Таблицы загрузок не найдены в базе данных. Выполните миграции (pnpm db:migrate) для текущего окружения.',
-        },
-        { status: 500 },
-      );
     }
     return Response.json({ error: 'Upload failed' }, { status: 500 });
   }

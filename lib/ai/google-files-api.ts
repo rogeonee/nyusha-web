@@ -42,31 +42,28 @@ function sleep(ms: number) {
 }
 
 function toGeminiFileRecord(payload: unknown): GeminiFileRecord {
-  const source =
-    typeof payload === 'object' &&
-    payload !== null &&
-    'file' in payload &&
-    typeof (payload as { file?: unknown }).file === 'object' &&
-    (payload as { file?: unknown }).file !== null
-      ? (payload as { file: GeminiFileApiResponse }).file
-      : (payload as GeminiFileApiResponse);
+  const raw = payload as Record<string, unknown> | null;
+  const wrapped =
+    raw && typeof raw.file === 'object' && raw.file !== null
+      ? (raw.file as GeminiFileApiResponse)
+      : (raw as unknown as GeminiFileApiResponse);
 
-  if (!source.name || !source.uri || !source.mimeType) {
+  if (!wrapped?.name || !wrapped.uri || !wrapped.mimeType) {
     throw new Error('Gemini Files API returned incomplete file metadata.');
   }
 
   const state =
-    typeof source.state === 'string'
-      ? source.state
-      : source.state && typeof source.state.name === 'string'
-      ? source.state.name
+    typeof wrapped.state === 'string'
+      ? wrapped.state
+      : wrapped.state && typeof wrapped.state.name === 'string'
+      ? wrapped.state.name
       : null;
 
   return {
-    name: source.name,
-    uri: source.uri,
-    mimeType: source.mimeType,
-    expiresAt: source.expirationTime ? new Date(source.expirationTime) : null,
+    name: wrapped.name,
+    uri: wrapped.uri,
+    mimeType: wrapped.mimeType,
+    expiresAt: wrapped.expirationTime ? new Date(wrapped.expirationTime) : null,
     state,
   };
 }
@@ -76,21 +73,13 @@ function shouldRetryResponse(status: number) {
 }
 
 function parseErrorMessage(payload: unknown, fallback: string) {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'error' in payload &&
-    typeof (payload as { error?: unknown }).error === 'object' &&
-    (payload as { error?: unknown }).error !== null
-  ) {
-    const errorMessage = (payload as { error: { message?: unknown } }).error
-      .message;
-    if (typeof errorMessage === 'string' && errorMessage.length > 0) {
-      return errorMessage;
-    }
-  }
-
-  return fallback;
+  const raw = payload as Record<string, unknown> | null;
+  const err =
+    raw && typeof raw.error === 'object'
+      ? (raw.error as Record<string, unknown>)
+      : null;
+  const message = err && typeof err.message === 'string' ? err.message : '';
+  return message.length > 0 ? message : fallback;
 }
 
 async function fetchJsonWithRetry({
@@ -367,13 +356,11 @@ export async function uploadBytesToGeminiFile({
     throw new Error('Gemini resumable upload URL was not returned.');
   }
 
-  const uploadBodyBytes = Uint8Array.from(bytes);
-
   const payload = await fetchJsonWithRetry({
     url: uploadUrl,
     timeoutMs,
     buildInit: () => ({
-      body: uploadBodyBytes,
+      body: bytes as unknown as BodyInit,
       method: 'POST',
       headers: {
         'content-type': mediaType,
