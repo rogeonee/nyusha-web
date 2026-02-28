@@ -9,6 +9,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
 - **Uploads:** Phase A live with direct client upload: browser uses Vercel Blob client uploads via `/api/files/upload-token`; `/api/files/upload` now finalizes server-verified metadata in `chat_files` and chat route links attachments via `message_file_attachments`.
+- **Phase B:** Gemini Files reuse is now wired in `/api/chat`: runtime context hydration resolves file metadata from `chat_files`, refreshes expired/missing Gemini URIs on demand, and falls back to Blob URLs without failing the request.
 - **Models:** Central registry in `lib/ai/models.ts` with Gemini-only options (3.1 Pro, 3.0 Pro, 3.0 Flash, 2.5 Flash). Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
 - **Model UX:** Compact picker in composer shows `shortName` in trigger, full names in dropdown grouped by `Pro` and `Flash`. Model choice is persisted per chat (`chats.model_id`), while `chat-model` cookie is only a default seed for brand-new chats.
 - **Reasoning:** Gemini thought summaries enabled for 3.x (`includeThoughts: true`, `thinkingLevel: 'high'`). 2.5 Flash is configured for cost-safe fallback (`thinkingBudget: 0`, `includeThoughts: false`). `sendReasoning` defaults to true in AI SDK.
@@ -40,6 +41,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - `/api/chat` now uses custom `experimental_download` for model file fetches, adding Blob auth headers for private blob URLs.
 - File uploads now bypass function body limits by uploading bytes directly from browser to Blob; `/api/files/upload` expects JSON finalize payload (`chatId`, `pathname`, `filename`) and no longer accepts multipart file bodies.
 - Upload finalize now treats `chat_files.storage_key` unique conflicts as idempotent retries and returns the existing row instead of deleting the blob.
+- Gemini Files refresh currently runs inline in `/api/chat` under per-file DB row locks; for family-scale this is acceptable, but high concurrency would benefit from background refresh jobs.
 
 ## Decisions Log
 
@@ -60,3 +62,4 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **First-turn uploads:** Upload route creates a `New Chat` row on demand (chat UUID is generated client-side before first message) to allow attachments before initial text submission.
 - **Attachment write atomicity:** User message insert + message-file linkage insert now happen in one DB transaction for first-write paths.
 - **Blob access mode:** Upload route defaults to private access and auto-falls back to public if the connected Blob store requires it (`BLOB_ACCESS` can override default).
+- **Phase B reuse strategy:** Persisted message parts remain Blob-canonical; Gemini file URIs are used only at runtime model assembly so history stays provider-agnostic and tamper-resistant.

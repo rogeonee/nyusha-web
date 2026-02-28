@@ -443,6 +443,98 @@ export async function getChatFilesByIdsForUserChat({
     );
 }
 
+export async function getChatFilesByIdsForUserChatForUpdate({
+  tx,
+  fileIds,
+  userId,
+  chatId,
+}: {
+  tx: any;
+  fileIds: string[];
+  userId: string;
+  chatId: string;
+}) {
+  if (fileIds.length === 0) {
+    return [];
+  }
+
+  return tx
+    .select()
+    .from(chatFiles)
+    .where(
+      and(
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+        inArray(chatFiles.id, fileIds),
+      ),
+    )
+    .for('update');
+}
+
+export async function updateChatFileGeminiReference({
+  tx,
+  fileId,
+  userId,
+  chatId,
+  geminiFileUri,
+  geminiFileExpiresAt,
+}: {
+  tx?: any;
+  fileId: string;
+  userId: string;
+  chatId: string;
+  geminiFileUri: string;
+  geminiFileExpiresAt: Date;
+}) {
+  const db = tx ?? getDb();
+  const [file] = await db
+    .update(chatFiles)
+    .set({
+      geminiFileUri,
+      geminiFileExpiresAt,
+    })
+    .where(
+      and(
+        eq(chatFiles.id, fileId),
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+      ),
+    )
+    .returning();
+
+  return file ?? null;
+}
+
+export async function clearChatFileGeminiReference({
+  tx,
+  fileId,
+  userId,
+  chatId,
+}: {
+  tx?: any;
+  fileId: string;
+  userId: string;
+  chatId: string;
+}) {
+  const db = tx ?? getDb();
+  const [file] = await db
+    .update(chatFiles)
+    .set({
+      geminiFileUri: null,
+      geminiFileExpiresAt: null,
+    })
+    .where(
+      and(
+        eq(chatFiles.id, fileId),
+        eq(chatFiles.userId, userId),
+        eq(chatFiles.chatId, chatId),
+      ),
+    )
+    .returning();
+
+  return file ?? null;
+}
+
 export async function getChatFilesByChatId(chatId: string) {
   const db = getDb();
   return db
@@ -651,5 +743,5 @@ export async function getMessagesByChatId(chatId: string) {
     .select()
     .from(messages)
     .where(eq(messages.chatId, chatId))
-    .orderBy(asc(messages.createdAt));
+    .orderBy(asc(messages.createdAt), asc(messages.id));
 }
