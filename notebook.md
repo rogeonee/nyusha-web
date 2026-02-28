@@ -8,11 +8,13 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Next phase:** None scheduled. Non-Google providers deferred to a side track.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
+- **Uploads:** Phase A live with direct client upload: browser uses Vercel Blob client uploads via `/api/files/upload-token`; `/api/files/upload` now finalizes server-verified metadata in `chat_files` and chat route links attachments via `message_file_attachments`.
+- **Phase B:** Gemini Files reuse is now wired in `/api/chat`: runtime context hydration resolves file metadata from `chat_files`, refreshes expired/missing Gemini URIs on demand, and falls back to Blob URLs without failing the request.
 - **Models:** Central registry in `lib/ai/models.ts` with Gemini-only options (3.1 Pro, 3.0 Pro, 3.0 Flash, 2.5 Flash). Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
 - **Model UX:** Compact picker in composer shows `shortName` in trigger, full names in dropdown grouped by `Pro` and `Flash`. Model choice is persisted per chat (`chats.model_id`), while `chat-model` cookie is only a default seed for brand-new chats.
 - **Reasoning:** Gemini thought summaries enabled for 3.x (`includeThoughts: true`, `thinkingLevel: 'high'`). 2.5 Flash is configured for cost-safe fallback (`thinkingBudget: 0`, `includeThoughts: false`). `sendReasoning` defaults to true in AI SDK.
 - **Auth:** Invite-only credentials auth, JWT cookie sessions, DB-backed session records, and DB-backed lockout fields on `users` (`failed_login_attempts`, `locked_until`, `last_failed_login_at`). Gated by `FAMILY_ALLOWED_EMAILS`.
-- **DB schema:** `users` (with lockout columns), `sessions`, `chats` (with `model_id`), `messages`, `assistant_generation_reservations` (concurrency-safe quota reservations). Migrations in `drizzle/`.
+- **DB schema:** `users`, `sessions`, `chats`, `messages`, `assistant_generation_reservations`, plus upload tables `chat_files` and `message_file_attachments`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone.
 - **Build/lint:** `pnpm build` and `pnpm lint` (`tsc --noEmit`) pass on the current branch.
 - **Validation:** `pnpm lint` and `pnpm build` pass after Phase 5 hardening. Browser smoke scenarios (especially auth lockout + cross-account authz) should be re-checked with two real user sessions before production rollout.
@@ -32,6 +34,14 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - `/api/chat` now rebuilds model context from persisted DB messages and can return `409` on client/DB divergence; client should refresh state before retrying.
 - Daily limiting now counts persisted assistant replies (completed generations). Aborted/failed generations before `onFinish` are not counted.
 - Assistant quota reservations auto-expire after 5 minutes; severe server interruption can temporarily undercount available slots until reservation TTL elapses.
+- File uploads require `BLOB_READ_WRITE_TOKEN`; upload/delete operations return explicit errors when missing and leave DB state unchanged.
+- Chat delete now performs blob cleanup before DB delete; transient blob API failures will block chat deletion until retry.
+- Chat delete treats `BlobNotFoundError` as non-fatal so stale/missing blob keys do not block chat deletion.
+- Upload rollback now attempts immediate blob deletion if DB metadata insert fails after blob upload.
+- `/api/chat` now uses custom `experimental_download` for model file fetches, adding Blob auth headers for private blob URLs.
+- File uploads now bypass function body limits by uploading bytes directly from browser to Blob; `/api/files/upload` expects JSON finalize payload (`chatId`, `pathname`, `filename`) and no longer accepts multipart file bodies.
+- Upload finalize now treats `chat_files.storage_key` unique conflicts as idempotent retries and returns the existing row instead of deleting the blob.
+- Gemini Files refresh currently runs inline in `/api/chat` under per-file DB row locks; for family-scale this is acceptable, but high concurrency would benefit from background refresh jobs.
 
 ## Decisions Log
 
@@ -48,3 +58,9 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **Rate limit metric:** Switched from user message count to assistant reply count so duplicate message-id replay cannot bypass limits.
 - **Quota concurrency control:** Added DB reservation slots (`assistant_generation_reservations`) checked in a transaction before streaming to prevent parallel requests from overshooting daily assistant limits.
 - **Auth hardening:** Added DB-backed lockout (5 failed attempts, 15-minute lock, 600ms failure delay) to keep brute-force protection minimal but effective for family-scale usage.
+- **Attachment trust model:** `fileId` is authoritative in `/api/chat`; server ignores client file URL/media metadata and hydrates canonical file parts from DB-owned rows.
+- **First-turn uploads:** Upload route creates a `New Chat` row on demand (chat UUID is generated client-side before first message) to allow attachments before initial text submission.
+- **Attachment write atomicity:** User message insert + message-file linkage insert now happen in one DB transaction for first-write paths.
+- **Blob access mode:** Upload route defaults to private access and auto-falls back to public if the connected Blob store requires it (`BLOB_ACCESS` can override default).
+- **Phase B reuse strategy:** Persisted message parts remain Blob-canonical; Gemini file URIs are used only at runtime model assembly so history stays provider-agnostic and tamper-resistant.
+- **Hydration stability:** `ChatModelSelector` now renders a non-Radix fallback until mount to avoid SSR/client Radix `useId` drift causing hydration warnings in Next 16/Turbopack.
