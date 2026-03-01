@@ -3,14 +3,11 @@ import { z } from 'zod';
 import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { getCurrentUser } from '@/lib/auth/session';
 import { createChatIfAbsent, getChatById } from '@/lib/db/queries';
-
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MEDIA_TYPES = [
-  'application/pdf',
-  'text/plain',
-  'image/jpeg',
-  'image/png',
-] as const;
+import {
+  ALLOWED_MEDIA_TYPES,
+  MAX_UPLOAD_SIZE_BYTES,
+  isAllowedMediaType,
+} from '@/lib/uploads';
 
 const uploadEventSchema = z.object({
   type: z.enum(['blob.generate-client-token', 'blob.upload-completed']),
@@ -123,12 +120,7 @@ export async function POST(request: Request) {
 
         const payload = parseClientPayload(clientPayload);
 
-        if (
-          payload.mediaType &&
-          !ALLOWED_MEDIA_TYPES.includes(
-            payload.mediaType as (typeof ALLOWED_MEDIA_TYPES)[number],
-          )
-        ) {
+        if (payload.mediaType && !isAllowedMediaType(payload.mediaType)) {
           throw new Error('Неподдерживаемый тип файла.');
         }
 

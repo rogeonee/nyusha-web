@@ -43,19 +43,13 @@ import {
   resolveChatModelId,
   type ChatModelId,
 } from '@/lib/ai/models';
+import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
 
 const OFFLINE_ERROR_MESSAGE =
   'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
 const FILE_UPLOAD_ERROR_MESSAGE =
   'Не удалось загрузить файл. Попробуйте еще раз.';
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MEDIA_TYPES = [
-  'application/pdf',
-  'text/plain',
-  'image/jpeg',
-  'image/png',
-] as const;
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 type BlobAccessMode = 'private' | 'public';
 
@@ -442,12 +436,7 @@ export default function Chat({
       try {
         const settledUploads = await Promise.allSettled(
           files.map(async (file) => {
-            if (
-              file.type &&
-              !ALLOWED_MEDIA_TYPES.includes(
-                file.type as (typeof ALLOWED_MEDIA_TYPES)[number],
-              )
-            ) {
+            if (file.type && !isAllowedMediaType(file.type)) {
               throw new Error('Неподдерживаемый тип файла.');
             }
 
@@ -883,7 +872,7 @@ export default function Chat({
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.txt,image/jpeg,image/png"
+                accept=".pdf,.docx,.txt,image/jpeg,image/png"
                 multiple
                 onChange={(event) => {
                   void handleFilePickerChange(event);

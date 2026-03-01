@@ -7,7 +7,9 @@ import {
   type UIMessage,
 } from 'ai';
 import { google } from '@ai-sdk/google';
+import mammoth from 'mammoth';
 import { BlobNotFoundError, del } from '@vercel/blob';
+import { DOCX_MEDIA_TYPE } from '@/lib/uploads';
 import {
   deleteGeminiFile,
   uploadBytesToGeminiFile,
@@ -358,6 +360,12 @@ async function hydrateMessagesForModelContext({
       continue;
     }
 
+    if (file.mediaType === DOCX_MEDIA_TYPE) {
+      runtimeUrlByFileId.set(file.id, file.storageUrl);
+      stats.blobFallbackCount += 1;
+      continue;
+    }
+
     if (
       preferGeminiUri &&
       isGeminiUriReusable({
@@ -423,6 +431,32 @@ async function hydrateMessagesForModelContext({
       }
 
       const runtimeUrl = runtimeUrlByFileId.get(file.id) ?? file.storageUrl;
+
+      if (file.mediaType === DOCX_MEDIA_TYPE) {
+        try {
+          const source = await fetchStorageBytes({
+            url: file.storageUrl,
+            mediaType: file.mediaType,
+          });
+          const { value: extractedText } = await mammoth.extractRawText({
+            buffer: Buffer.from(source.bytes),
+          });
+          hydratedParts.push({
+            type: 'text',
+            text: `[File: ${file.filename}]\n\n${extractedText}`,
+          });
+        } catch (error) {
+          console.error('DOCX text extraction failed:', {
+            fileId: file.id,
+            error,
+          });
+          hydratedParts.push({
+            type: 'text',
+            text: `[File: ${file.filename}] (не удалось извлечь текст)`,
+          });
+        }
+        continue;
+      }
 
       hydratedParts.push({
         type: 'file',

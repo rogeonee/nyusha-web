@@ -6,14 +6,7 @@ import {
   getChatById,
   getChatFileByStorageKeyForUserChat,
 } from '@/lib/db/queries';
-
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MEDIA_TYPES = [
-  'application/pdf',
-  'text/plain',
-  'image/jpeg',
-  'image/png',
-] as const;
+import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
 const finalizeUploadSchema = z.object({
   chatId: z.uuid(),
   pathname: z
@@ -136,11 +129,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      !ALLOWED_MEDIA_TYPES.includes(
-        blob.contentType as (typeof ALLOWED_MEDIA_TYPES)[number],
-      )
-    ) {
+    if (!isAllowedMediaType(blob.contentType)) {
       return Response.json(
         { error: 'Неподдерживаемый тип файла.' },
         { status: 400 },
