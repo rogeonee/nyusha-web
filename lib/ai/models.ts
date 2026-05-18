@@ -7,18 +7,8 @@ export const chatModels = [
     shortName: '3.1 Pro',
     provider: 'google',
     family: 'pro',
-    description: 'Latest Pro preview for the strongest reasoning quality',
+    description: 'Heavy hitter for the strongest reasoning quality',
     sdkModelId: 'gemini-3.1-pro-preview',
-    thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
-  },
-  {
-    id: 'google/gemini-3-pro-preview',
-    name: 'Gemini 3.0 Pro',
-    shortName: '3.0 Pro',
-    provider: 'google',
-    family: 'pro',
-    description: 'Most capable for complex questions and planning',
-    sdkModelId: 'gemini-3-pro-preview',
     thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
   },
   {
@@ -27,30 +17,34 @@ export const chatModels = [
     shortName: '3.0 Flash',
     provider: 'google',
     family: 'flash',
-    description: 'Latest Flash — fast, smart, and cost-effective',
+    description: 'Default balance of speed, quality, and cost',
     sdkModelId: 'gemini-3-flash-preview',
     thinkingConfig: { thinkingLevel: 'low', includeThoughts: true },
   },
   {
-    id: 'google/gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    shortName: '2.5 Flash',
+    id: 'google/gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash-Lite',
+    shortName: '3.1 Lite',
     provider: 'google',
     family: 'flash',
-    description: 'Proven and efficient for everyday chats',
-    sdkModelId: 'gemini-2.5-flash',
-    thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
+    description: 'Faster and cheaper for simpler everyday chats',
+    sdkModelId: 'gemini-3.1-flash-lite',
+    thinkingConfig: { thinkingLevel: 'low', includeThoughts: false },
   },
 ] as const;
 
 export type ChatModel = (typeof chatModels)[number];
 export type ChatModelId = ChatModel['id'];
 
-export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-2.5-flash';
+export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-3-flash-preview';
 const PREVIEW_MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
-  'google/gemini-3.1-pro-preview': DEFAULT_CHAT_MODEL,
-  'google/gemini-3-pro-preview': DEFAULT_CHAT_MODEL,
-  'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
+  'google/gemini-3.1-pro-preview': 'google/gemini-3.1-flash-lite',
+  'google/gemini-3-flash-preview': 'google/gemini-3.1-flash-lite',
+};
+
+const LEGACY_MODEL_ALIASES: Partial<Record<string, ChatModelId>> = {
+  'google/gemini-3-pro-preview': 'google/gemini-3.1-pro-preview',
+  'google/gemini-2.5-flash': DEFAULT_CHAT_MODEL,
 };
 
 const chatModelById = new Map<ChatModelId, ChatModel>(
@@ -73,6 +67,10 @@ export function isChatModelId(value: string): value is ChatModelId {
 export function resolveChatModelId(value?: string | null): ChatModelId {
   if (value && isChatModelId(value)) {
     return value;
+  }
+
+  if (value && LEGACY_MODEL_ALIASES[value]) {
+    return LEGACY_MODEL_ALIASES[value];
   }
 
   return DEFAULT_CHAT_MODEL;

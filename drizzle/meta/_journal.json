@@ -50,6 +50,13 @@
       "when": 1771752980196,
       "tag": "0006_steep_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779072469908,
+      "tag": "0007_equal_enchantress",
+      "breakpoints": true
     }
   ]
 }

@@ -69,7 +69,7 @@ export const chats = pgTable('chats', {
   title: text('title').notNull(),
   modelId: varchar('model_id', { length: 100 })
     .notNull()
-    .default('google/gemini-2.5-flash'),
+    .default('google/gemini-3-flash-preview'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
