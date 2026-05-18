@@ -12,9 +12,13 @@ const messageSchema = z.object({
   parts: z.array(messagePartSchema),
 });
 
+const userMessageSchema = messageSchema.extend({
+  role: z.literal('user'),
+});
+
 export const postRequestBodySchema = z.object({
   id: z.uuid(),
-  messages: z.array(messageSchema).min(1),
+  latestUserMessage: userMessageSchema,
   selectedChatModel: z.string().min(1),
   trigger: z.enum(['submit-message', 'regenerate-message']),
   messageId: z.string().min(1).max(200).optional(),

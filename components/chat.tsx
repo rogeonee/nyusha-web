@@ -25,6 +25,7 @@ import {
   ReasoningBlock,
   parseReasoningChunks,
 } from '@/components/reasoning-block';
+import { MessageSources } from '@/components/message-sources';
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
 import { ChatModelSelector } from '@/components/chat-model-selector';
@@ -247,13 +248,18 @@ export default function Chat({
   } = useChat({
     id,
     messages: initialMessages,
+    experimental_throttle: 50,
     transport: new DefaultChatTransport({
       api: '/api/chat',
       prepareSendMessagesRequest(request) {
+        const latestUserMessage = [...request.messages]
+          .reverse()
+          .find((message) => message.role === 'user');
+
         return {
           body: {
             id: request.id,
-            messages: request.messages,
+            latestUserMessage,
             selectedChatModel: currentModelIdRef.current,
             trigger: request.trigger,
             messageId: request.messageId,
@@ -677,12 +683,18 @@ export default function Chat({
                 {messages.map((message) => {
                   const text = getMessageText(message);
                   const files = getMessageFiles(message);
+                  const hasSources = message.parts.some(
+                    (part) =>
+                      part.type === 'source-url' ||
+                      part.type === 'source-document',
+                  );
                   const hasText = text.trim().length > 0;
 
                   if (
                     message.role === 'assistant' &&
                     !hasText &&
-                    files.length === 0
+                    files.length === 0 &&
+                    !hasSources
                   ) {
                     return null;
                   }
@@ -752,12 +764,15 @@ export default function Chat({
                               </div>
                             ) : null}
                             {message.role === 'assistant' ? (
-                              <Streamdown
-                                className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
-                                plugins={{ math: mathPlugin }}
-                              >
-                                {text}
-                              </Streamdown>
+                              <>
+                                <Streamdown
+                                  className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                  plugins={{ math: mathPlugin }}
+                                >
+                                  {text}
+                                </Streamdown>
+                                <MessageSources parts={message.parts} />
+                              </>
                             ) : (
                               text
                             )}

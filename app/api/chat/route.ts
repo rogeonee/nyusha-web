@@ -742,18 +742,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const messages = requestBody.messages as UIMessage[];
   const requestedModelId = selectedChatModel as ChatModelId;
-  const lastUserMessage = [...messages]
-    .reverse()
-    .find((m) => m.role === 'user');
-
-  if (!lastUserMessage) {
-    return Response.json(
-      { error: INVALID_USER_MESSAGE_ERROR },
-      { status: 400 },
-    );
-  }
+  const lastUserMessage = requestBody.latestUserMessage as UIMessage;
 
   if (
     trigger === 'submit-message' &&
@@ -954,7 +944,7 @@ export async function POST(request: Request) {
 
       try {
         const primary = await createResultForModel(activeModelId);
-        writer.merge(primary.result.toUIMessageStream());
+        writer.merge(primary.result.toUIMessageStream({ sendSources: true }));
       } catch (primaryError) {
         const fallbackModelId = getFallbackChatModelId(activeModelId);
 
@@ -965,7 +955,9 @@ export async function POST(request: Request) {
               `Primary model unavailable (${activeModelId}); falling back to ${fallbackModelId}:`,
               primaryError,
             );
-            writer.merge(fallback.result.toUIMessageStream());
+            writer.merge(
+              fallback.result.toUIMessageStream({ sendSources: true }),
+            );
             return;
           } catch (fallbackError) {
             console.error(
