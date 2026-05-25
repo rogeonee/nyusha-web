@@ -15,11 +15,15 @@ import {
   uploadBytesToGeminiFile,
 } from '@/lib/ai/google-files-api';
 import {
+  DEFAULT_CHAT_REASONING_LEVEL,
   getChatModelById,
   getFallbackChatModelId,
+  getThinkingConfigForModel,
   isChatModelId,
+  isChatReasoningLevelId,
   resolveChatModelId,
   type ChatModelId,
+  type ChatReasoningLevelId,
 } from '@/lib/ai/models';
 import { getLanguageModel } from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
@@ -733,7 +737,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  const { id, selectedChatModel, trigger, messageId } = requestBody;
+  const { id, selectedChatModel, selectedReasoningLevel, trigger, messageId } =
+    requestBody;
 
   if (!isChatModelId(selectedChatModel)) {
     return Response.json(
@@ -742,7 +747,19 @@ export async function POST(request: Request) {
     );
   }
 
+  const requestedReasoningLevelValue =
+    selectedReasoningLevel ?? DEFAULT_CHAT_REASONING_LEVEL;
+
+  if (!isChatReasoningLevelId(requestedReasoningLevelValue)) {
+    return Response.json(
+      { error: `Unknown reasoning level: ${requestedReasoningLevelValue}` },
+      { status: 400 },
+    );
+  }
+
   const requestedModelId = selectedChatModel as ChatModelId;
+  const requestedReasoningLevelId =
+    requestedReasoningLevelValue as ChatReasoningLevelId;
   const lastUserMessage = requestBody.latestUserMessage as UIMessage;
 
   if (
@@ -922,7 +939,12 @@ export async function POST(request: Request) {
             google_search: google.tools.googleSearch({}),
           },
           providerOptions: {
-            google: { thinkingConfig: chatModel.thinkingConfig },
+            google: {
+              thinkingConfig: getThinkingConfigForModel({
+                model: chatModel,
+                reasoningLevelId: requestedReasoningLevelId,
+              }),
+            },
           },
           experimental_download: downloadAssetsForModel,
         });

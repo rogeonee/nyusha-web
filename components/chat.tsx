@@ -29,6 +29,7 @@ import { MessageSources } from '@/components/message-sources';
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
 import { ChatModelSelector } from '@/components/chat-model-selector';
+import { ChatReasoningSelector } from '@/components/chat-reasoning-selector';
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,9 +41,12 @@ import { MessageEditor } from '@/components/message-editor';
 import { deleteTrailingMessages } from '@/app/(chat)/actions';
 import {
   DEFAULT_CHAT_MODEL,
+  DEFAULT_CHAT_REASONING_LEVEL,
   getChatModelById,
   resolveChatModelId,
+  resolveChatReasoningLevelId,
   type ChatModelId,
+  type ChatReasoningLevelId,
 } from '@/lib/ai/models';
 import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
 
@@ -190,16 +194,22 @@ export default function Chat({
   id,
   initialMessages = [],
   initialChatModel = DEFAULT_CHAT_MODEL,
+  initialReasoningLevel = DEFAULT_CHAT_REASONING_LEVEL,
 }: {
   id: string;
   initialMessages?: UIMessage[];
   initialChatModel?: string;
+  initialReasoningLevel?: string;
 }) {
   const [input, setInput] = useState<string>('');
   const [showLongWaitNotice, setShowLongWaitNotice] = useState(false);
   const [currentModelId, setCurrentModelId] = useState<ChatModelId>(
     resolveChatModelId(initialChatModel),
   );
+  const [currentReasoningLevelId, setCurrentReasoningLevelId] =
+    useState<ChatReasoningLevelId>(
+      resolveChatReasoningLevelId(initialReasoningLevel),
+    );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
@@ -215,6 +225,9 @@ export default function Chat({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
+  const currentReasoningLevelIdRef = useRef<ChatReasoningLevelId>(
+    currentReasoningLevelId,
+  );
   const sendTimeRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
@@ -223,6 +236,10 @@ export default function Chat({
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
+
+  useEffect(() => {
+    currentReasoningLevelIdRef.current = currentReasoningLevelId;
+  }, [currentReasoningLevelId]);
 
   // Offline detection
   useEffect(() => {
@@ -261,6 +278,7 @@ export default function Chat({
             id: request.id,
             latestUserMessage,
             selectedChatModel: currentModelIdRef.current,
+            selectedReasoningLevel: currentReasoningLevelIdRef.current,
             trigger: request.trigger,
             messageId: request.messageId,
           },
@@ -877,10 +895,14 @@ export default function Chat({
         <div className="mx-auto w-full max-w-3xl">
           <Card className="p-2">
             <form onSubmit={handleSubmit} className="space-y-1.5">
-              <div className="px-1">
+              <div className="flex flex-wrap items-center gap-1 px-1">
                 <ChatModelSelector
                   selectedModelId={currentModelId}
                   onModelChange={setCurrentModelId}
+                />
+                <ChatReasoningSelector
+                  selectedReasoningLevelId={currentReasoningLevelId}
+                  onReasoningLevelChange={setCurrentReasoningLevelId}
                 />
               </div>
               <input
