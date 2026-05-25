@@ -20,6 +20,7 @@ export const postRequestBodySchema = z.object({
   id: z.uuid(),
   latestUserMessage: userMessageSchema,
   selectedChatModel: z.string().min(1),
+  selectedReasoningLevel: z.string().min(1).optional(),
   trigger: z.enum(['submit-message', 'regenerate-message']),
   messageId: z.string().min(1).max(200).optional(),
 });

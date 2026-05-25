@@ -1,7 +1,12 @@
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
-import { resolveChatModelId } from '@/lib/ai/models';
+import {
+  CHAT_REASONING_COOKIE_NAME,
+  resolveChatModelId,
+  resolveChatReasoningLevelId,
+} from '@/lib/ai/models';
 import Chat from '@/components/chat';
 import type { UIMessage } from 'ai';
 
@@ -25,6 +30,10 @@ export default async function ChatPage({
 
   const dbMessages = await getMessagesByChatId(id);
   const initialChatModel = resolveChatModelId(chat.modelId);
+  const cookieStore = await cookies();
+  const initialReasoningLevel = resolveChatReasoningLevelId(
+    cookieStore.get(CHAT_REASONING_COOKIE_NAME)?.value,
+  );
 
   const initialMessages: UIMessage[] = dbMessages.map((m) => ({
     id: m.id,
@@ -38,6 +47,7 @@ export default async function ChatPage({
       id={id}
       initialMessages={initialMessages}
       initialChatModel={initialChatModel}
+      initialReasoningLevel={initialReasoningLevel}
     />
   );
 }
