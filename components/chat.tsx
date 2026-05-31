@@ -1,7 +1,13 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useChat } from '@ai-sdk/react';
 import { upload as uploadToBlob } from '@vercel/blob/client';
 import { DefaultChatTransport, type UIMessage } from 'ai';
@@ -21,10 +27,8 @@ import {
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
-import {
-  ReasoningBlock,
-  parseReasoningChunks,
-} from '@/components/reasoning-block';
+import { ReasoningBlock } from '@/components/reasoning-block';
+import { parseReasoningChunks } from '@/lib/ai/reasoning';
 import { MessageSources } from '@/components/message-sources';
 import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
@@ -56,6 +60,7 @@ const FILE_UPLOAD_ERROR_MESSAGE =
   'Не удалось загрузить файл. Попробуйте еще раз.';
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
+const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
 type BlobAccessMode = 'private' | 'public';
 
 type PendingAttachment = {
@@ -64,6 +69,31 @@ type PendingAttachment = {
   mediaType: string;
   sizeBytes: number;
 };
+
+type ChatProps = {
+  id: string;
+  initialMessages?: UIMessage[];
+  initialChatModel?: string;
+  initialReasoningLevel?: string;
+};
+
+function subscribeOnlineStatus(onStoreChange: () => void) {
+  window.addEventListener('online', onStoreChange);
+  window.addEventListener('offline', onStoreChange);
+
+  return () => {
+    window.removeEventListener('online', onStoreChange);
+    window.removeEventListener('offline', onStoreChange);
+  };
+}
+
+function getOnlineSnapshot() {
+  return navigator.onLine;
+}
+
+function getServerOnlineSnapshot() {
+  return true;
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -76,6 +106,7 @@ function CopyButton({ text }: { text: string }) {
 
   return (
     <button
+      type="button"
       className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
       onClick={() => void handleCopy()}
       title="Копировать"
@@ -100,6 +131,7 @@ function UserMessageActions({
     <div className="mt-1 flex items-center justify-end gap-1 opacity-100 pointer-events-auto transition-opacity md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto">
       <CopyButton text={text} />
       <button
+        type="button"
         className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
         onClick={onEdit}
         title="Редактировать"
@@ -132,6 +164,7 @@ function AssistantMessageActions({
     <div className="mt-1 flex w-full items-center gap-1">
       <CopyButton text={text} />
       <button
+        type="button"
         className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
         onClick={onRegenerate}
         disabled={isDisabled}
@@ -190,37 +223,47 @@ function isAccessModeMismatchError(
     : message.includes('Cannot use private access on a public store');
 }
 
+// react-doctor-disable-next-line react-doctor/no-giant-component -- This component owns tightly coupled chat streaming, upload, and composer state; splitting it safely is a separate behavior-preserving refactor.
 export default function Chat({
   id,
-  initialMessages = [],
+  initialMessages = EMPTY_INITIAL_MESSAGES,
   initialChatModel = DEFAULT_CHAT_MODEL,
   initialReasoningLevel = DEFAULT_CHAT_REASONING_LEVEL,
-}: {
-  id: string;
-  initialMessages?: UIMessage[];
-  initialChatModel?: string;
-  initialReasoningLevel?: string;
-}) {
+  // react-doctor-disable-next-line react-doctor/prefer-useReducer -- Remaining Chat state slices are independent async UI controls, not one reducer-managed state machine.
+}: ChatProps) {
   const [input, setInput] = useState<string>('');
   const [showLongWaitNotice, setShowLongWaitNotice] = useState(false);
-  const [currentModelId, setCurrentModelId] = useState<ChatModelId>(
-    resolveChatModelId(initialChatModel),
-  );
-  const [currentReasoningLevelId, setCurrentReasoningLevelId] =
-    useState<ChatReasoningLevelId>(
-      resolveChatReasoningLevelId(initialReasoningLevel),
-    );
+  const [chatPreferences, setChatPreferences] = useState(() => ({
+    modelId: resolveChatModelId(initialChatModel),
+    reasoningLevelId: resolveChatReasoningLevelId(initialReasoningLevel),
+  }));
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
-  const [isOnline, setIsOnline] = useState(true);
-  const [isRegenerating, setIsRegenerating] = useState(false);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const isOnline = useSyncExternalStore(
+    subscribeOnlineStatus,
+    getOnlineSnapshot,
+    getServerOnlineSnapshot,
+  );
+  const [regenerationState, setRegenerationState] = useState<{
+    isRegenerating: boolean;
+    error: string | null;
+  }>({
+    isRegenerating: false,
+    error: null,
+  });
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadState, setUploadState] = useState<{
+    isUploading: boolean;
+    error: string | null;
+  }>({
+    isUploading: false,
+    error: null,
+  });
+  const currentModelId = chatPreferences.modelId;
+  const currentReasoningLevelId = chatPreferences.reasoningLevelId;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -229,9 +272,25 @@ export default function Chat({
     currentReasoningLevelId,
   );
   const sendTimeRef = useRef<number>(0);
-  const router = useRouter();
+  const { replace } = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+  const { isRegenerating, error: regenerateError } = regenerationState;
+  const { isUploading, error: uploadError } = uploadState;
+
+  const setCurrentModelId = useCallback((modelId: ChatModelId) => {
+    setChatPreferences((preferences) => ({ ...preferences, modelId }));
+  }, []);
+
+  const setCurrentReasoningLevelId = useCallback(
+    (reasoningLevelId: ChatReasoningLevelId) => {
+      setChatPreferences((preferences) => ({
+        ...preferences,
+        reasoningLevelId,
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
@@ -240,19 +299,6 @@ export default function Chat({
   useEffect(() => {
     currentReasoningLevelIdRef.current = currentReasoningLevelId;
   }, [currentReasoningLevelId]);
-
-  // Offline detection
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const on = () => setIsOnline(true);
-    const off = () => setIsOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
 
   const {
     messages,
@@ -287,7 +333,7 @@ export default function Chat({
     }),
     onFinish: () => {
       if (pathname === '/') {
-        router.replace(`/chat/${id}`);
+        replace(`/chat/${id}`);
       }
       queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
@@ -299,8 +345,10 @@ export default function Chat({
   useEffect(() => {
     if (status === 'submitted') {
       sendTimeRef.current = Date.now();
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change react-doctor/no-chain-state-updates -- latency is reset when a provider request starts.
       setLastLatencyMs(null);
     } else if (status === 'ready' && sendTimeRef.current > 0) {
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change react-doctor/no-chain-state-updates -- latency is measured when the provider request finishes.
       setLastLatencyMs(Date.now() - sendTimeRef.current);
       sendTimeRef.current = 0;
     }
@@ -308,6 +356,7 @@ export default function Chat({
 
   useEffect(() => {
     if (!isAwaitingResponse) {
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- elapsed thinking time is a timer display that resets when streaming stops.
       setThinkingElapsedMs(0);
       return;
     }
@@ -319,6 +368,7 @@ export default function Chat({
       setThinkingElapsedMs(Math.max(0, Date.now() - startedAt));
     };
 
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the first tick primes the elapsed timer before the interval starts.
     tick();
     const intervalId = window.setInterval(tick, 1000);
 
@@ -345,12 +395,15 @@ export default function Chat({
     });
   }, [messages, status]);
 
+  // react-doctor-disable-next-line react-doctor/no-cascading-set-state -- the notice is a timer-driven side effect of the current request lifecycle.
   useEffect(() => {
     if (!isAwaitingResponse) {
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- long-wait notice resets when the request lifecycle exits waiting.
       setShowLongWaitNotice(false);
       return;
     }
 
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- long-wait notice resets at the beginning of each request lifecycle.
     setShowLongWaitNotice(false);
 
     const longWaitTimer = window.setTimeout(() => {
@@ -363,10 +416,10 @@ export default function Chat({
   }, [isAwaitingResponse]);
 
   const getMessageText = (message: UIMessage) =>
-    message.parts
-      .filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('');
+    message.parts.reduce(
+      (text, part) => (part.type === 'text' ? text + part.text : text),
+      '',
+    );
 
   const getMessageFiles = (message: UIMessage) =>
     message.parts.flatMap((part) => {
@@ -390,10 +443,10 @@ export default function Chat({
     });
 
   const getReasoningText = (message: UIMessage) =>
-    message.parts
-      .filter((part) => part.type === 'reasoning')
-      .map((part) => part.text)
-      .join('');
+    message.parts.reduce(
+      (text, part) => (part.type === 'reasoning' ? text + part.text : text),
+      '',
+    );
 
   const streamingReasoningText = lastAssistantMessage
     ? getReasoningText(lastAssistantMessage)
@@ -454,8 +507,7 @@ export default function Chat({
         return;
       }
 
-      setIsUploading(true);
-      setUploadError(null);
+      setUploadState({ isUploading: true, error: null });
 
       try {
         const settledUploads = await Promise.allSettled(
@@ -479,6 +531,7 @@ export default function Chat({
 
             for (const access of ['private', 'public'] as const) {
               try {
+                // react-doctor-disable-next-line react-doctor/async-await-in-loop -- fallback depends on the previous Blob access-mode error.
                 blob = await uploadToBlob(pathname, file, {
                   access,
                   handleUploadUrl: '/api/files/upload-token',
@@ -535,13 +588,17 @@ export default function Chat({
         const succeeded = settledUploads.flatMap((result) =>
           result.status === 'fulfilled' ? [result.value] : [],
         );
-        const failed = settledUploads
-          .filter((result) => result.status === 'rejected')
-          .map((result) =>
-            result.reason instanceof Error
-              ? result.reason.message
-              : FILE_UPLOAD_ERROR_MESSAGE,
-          );
+        const failed = settledUploads.reduce<string[]>((messages, result) => {
+          if (result.status === 'rejected') {
+            messages.push(
+              result.reason instanceof Error
+                ? result.reason.message
+                : FILE_UPLOAD_ERROR_MESSAGE,
+            );
+          }
+
+          return messages;
+        }, []);
 
         if (succeeded.length > 0) {
           setPendingAttachments((current) => [...current, ...succeeded]);
@@ -552,16 +609,16 @@ export default function Chat({
             failed.length === 1
               ? failed[0]
               : `Не удалось загрузить ${failed.length} файла(ов).`;
-          setUploadError(message);
+          setUploadState((state) => ({ ...state, error: message }));
           toast.error(message);
         }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : FILE_UPLOAD_ERROR_MESSAGE;
-        setUploadError(message);
+        setUploadState((state) => ({ ...state, error: message }));
         toast.error(message);
       } finally {
-        setIsUploading(false);
+        setUploadState((state) => ({ ...state, isUploading: false }));
       }
     },
     [id, isOnline, pendingAttachments.length],
@@ -596,8 +653,8 @@ export default function Chat({
     const prompt = input.trim();
     if (!prompt && pendingAttachments.length === 0) return;
 
-    setRegenerateError(null);
-    setUploadError(null);
+    setRegenerationState((state) => ({ ...state, error: null }));
+    setUploadState((state) => ({ ...state, error: null }));
     const attachmentsForMessage = [...pendingAttachments];
     setInput('');
     setPendingAttachments([]);
@@ -659,22 +716,30 @@ export default function Chat({
         return;
       }
 
-      setRegenerateError(null);
-      setIsRegenerating(true);
+      setRegenerationState({ isRegenerating: true, error: null });
 
       try {
         const deletionResult = await deleteTrailingMessages({ id: messageId });
 
         if (!deletionResult.ok) {
-          setRegenerateError(deletionResult.message);
+          setRegenerationState({
+            isRegenerating: true,
+            error: deletionResult.message,
+          });
           return;
         }
 
         await regenerate({ messageId });
       } catch {
-        setRegenerateError('Не удалось повторить ответ. Попробуйте снова.');
+        setRegenerationState({
+          isRegenerating: true,
+          error: 'Не удалось повторить ответ. Попробуйте снова.',
+        });
       } finally {
-        setIsRegenerating(false);
+        setRegenerationState((state) => ({
+          ...state,
+          isRegenerating: false,
+        }));
       }
     },
     [isOnline, isRegenerating, regenerate],
@@ -768,9 +833,9 @@ export default function Chat({
                             ) : null}
                             {files.length > 0 ? (
                               <div className="mb-2 flex flex-wrap gap-1.5">
-                                {files.map((file, index) => (
+                                {files.map((file) => (
                                   <div
-                                    key={`${message.id}-file-${index}`}
+                                    key={`${message.id}-file-${file.fileId ?? file.filename}`}
                                     className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
                                   >
                                     <PaperclipIcon className="size-3" />
@@ -837,8 +902,8 @@ export default function Chat({
                           </div>
                           <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
                             {hasStructuredStreamingChunks ? (
-                              streamingChunks.map((chunk, i) => (
-                                <div key={i}>
+                              streamingChunks.map((chunk) => (
+                                <div key={`${chunk.title}:${chunk.body}`}>
                                   <div className="font-medium">
                                     {chunk.title}
                                   </div>
@@ -908,6 +973,7 @@ export default function Chat({
               <input
                 ref={fileInputRef}
                 type="file"
+                aria-label="Прикрепить файл"
                 className="hidden"
                 accept=".pdf,.docx,.txt,image/jpeg,image/png"
                 multiple

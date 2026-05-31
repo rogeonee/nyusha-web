@@ -1,7 +1,13 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { getCurrentUser } from '@/lib/auth/session';
 import { LoginForm } from './login-form';
+
+export const metadata: Metadata = {
+  title: 'Login | Nyusha Chat',
+  description: 'Sign in to the private family chat.',
+};
 
 const loginErrorMessages: Record<string, string> = {
   invalid_data: 'Введите корректные email и пароль (минимум 8 символов).',
@@ -16,8 +22,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await getCurrentUser();
-  const { error } = await searchParams;
+  const [user, { error }] = await Promise.all([getCurrentUser(), searchParams]);
 
   if (user) {
     redirect('/');

@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Brain, Check, ChevronDown } from 'lucide-react';
 import {
   CHAT_REASONING_COOKIE_NAME,
@@ -15,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useMounted } from '@/hooks/use-mounted';
 
 const CHAT_REASONING_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -31,11 +31,7 @@ export function ChatReasoningSelector({
   selectedReasoningLevelId: ChatReasoningLevelId;
   onReasoningLevelChange: (reasoningLevelId: ChatReasoningLevelId) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   const selectedReasoningLevel = getChatReasoningLevelById(
     selectedReasoningLevelId,

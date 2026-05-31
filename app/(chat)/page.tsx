@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import Chat from '@/components/chat';
 import {
@@ -7,6 +8,11 @@ import {
   resolveChatModelId,
   resolveChatReasoningLevelId,
 } from '@/lib/ai/models';
+
+export const metadata: Metadata = {
+  title: 'New Chat | Nyusha Chat',
+  description: 'Start a new private family chat.',
+};
 
 export default async function NewChatPage() {
   const id = randomUUID();

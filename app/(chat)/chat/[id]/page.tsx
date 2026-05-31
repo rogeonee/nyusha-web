@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/session';
@@ -10,13 +11,17 @@ import {
 import Chat from '@/components/chat';
 import type { UIMessage } from 'ai';
 
+export const metadata: Metadata = {
+  title: 'Chat | Nyusha Chat',
+  description: 'Private family chat history.',
+};
+
 export default async function ChatPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const user = await getCurrentUser();
+  const [{ id }, user] = await Promise.all([params, getCurrentUser()]);
 
   if (!user) {
     notFound();

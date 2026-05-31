@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 
 export function ChatHeader() {
-  const router = useRouter();
+  const { push, refresh } = useRouter();
   const { toggleSidebar } = useSidebar();
 
   return (
@@ -19,8 +19,8 @@ export function ChatHeader() {
         variant="outline"
         className="h-fit px-2"
         onClick={() => {
-          router.push('/');
-          router.refresh();
+          push('/');
+          refresh();
         }}
       >
         <SquarePen className="size-4" />

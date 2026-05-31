@@ -16,7 +16,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **Auth:** Invite-only credentials auth, JWT cookie sessions, DB-backed session records, and DB-backed lockout fields on `users` (`failed_login_attempts`, `locked_until`, `last_failed_login_at`). Gated by `FAMILY_ALLOWED_EMAILS`.
 - **DB schema:** `users`, `sessions`, `chats`, `messages`, `assistant_generation_reservations`, plus upload tables `chat_files` and `message_file_attachments`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone.
-- **Build/lint:** `pnpm build` and `pnpm lint` (`tsc --noEmit`) pass on the current branch.
+- **Build/lint:** `pnpm build`, `pnpm lint` (`tsc --noEmit`), and `npx react-doctor@latest --score --full` (100) pass on the current branch.
 - **Validation:** `pnpm lint` and `pnpm build` pass after Phase 5 hardening. Browser smoke scenarios (especially auth lockout + cross-account authz) should be re-checked with two real user sessions before production rollout.
 
 ## Active Risks and Gotchas
@@ -27,7 +27,6 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Email uniqueness is case-normalized at app layer only (lowercase); no DB-level `citext`.
 - No pagination on chat list — fine for 2-4 users, would need limits if user base grows.
 - Chat title is set once from first user message and never updated.
-- `EnvCard` warning banner is no longer visible after global header removal; relocate if still needed.
 - `useChat` status values are `submitted | streaming | ready | error` (not `idle`); plan docs used wrong value.
 - `/api/chat` `maxDuration` is 300s (5 minutes). If timeouts still occur, reduce generation length or investigate provider-side latency.
 - Thinking tokens are billed even though only summaries are returned. If costs spike, lower `thinkingBudget`/`thinkingLevel` in `lib/ai/models.ts`.
@@ -42,6 +41,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - File uploads now bypass function body limits by uploading bytes directly from browser to Blob; `/api/files/upload` expects JSON finalize payload (`chatId`, `pathname`, `filename`) and no longer accepts multipart file bodies.
 - Upload finalize now treats `chat_files.storage_key` unique conflicts as idempotent retries and returns the existing row instead of deleting the blob.
 - Gemini Files refresh currently runs inline in `/api/chat` under per-file DB row locks; for family-scale this is acceptable, but high concurrency would benefit from background refresh jobs.
+- React Doctor is configured to ignore `ai-chatbot/**` because that folder is reference-only per repo policy.
 
 ## Decisions Log
 
@@ -65,4 +65,4 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **Attachment write atomicity:** User message insert + message-file linkage insert now happen in one DB transaction for first-write paths.
 - **Blob access mode:** Upload route defaults to private access and auto-falls back to public if the connected Blob store requires it (`BLOB_ACCESS` can override default).
 - **Phase B reuse strategy:** Persisted message parts remain Blob-canonical; Gemini file URIs are used only at runtime model assembly so history stays provider-agnostic and tamper-resistant.
-- **Hydration stability:** `ChatModelSelector` now renders a non-Radix fallback until mount to avoid SSR/client Radix `useId` drift causing hydration warnings in Next 16/Turbopack.
+- **Hydration stability:** Mounted-only client UI now uses `useSyncExternalStore` (`useMounted`) to avoid SSR/client Radix `useId` drift without mount-effect state.

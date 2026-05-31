@@ -267,22 +267,6 @@ export async function saveMessages(
   await db.insert(messages).values(msgs).onConflictDoNothing();
 }
 
-export async function saveMessageIfAbsent(msg: {
-  id: string;
-  chatId: string;
-  role: string;
-  parts: unknown;
-}) {
-  const db = getDb();
-  const inserted = await db
-    .insert(messages)
-    .values(msg)
-    .onConflictDoNothing()
-    .returning({ id: messages.id });
-
-  return inserted.length > 0;
-}
-
 export async function saveUserMessageWithAttachmentsIfAbsent({
   messageId,
   chatId,
@@ -367,30 +351,6 @@ export async function createChatFile({
     .returning();
 
   return file;
-}
-
-export async function getChatFileById({
-  fileId,
-  userId,
-  chatId,
-}: {
-  fileId: string;
-  userId: string;
-  chatId: string;
-}) {
-  const db = getDb();
-  const [file] = await db
-    .select()
-    .from(chatFiles)
-    .where(
-      and(
-        eq(chatFiles.id, fileId),
-        eq(chatFiles.userId, userId),
-        eq(chatFiles.chatId, chatId),
-      ),
-    );
-
-  return file ?? null;
 }
 
 export async function getChatFileByStorageKeyForUserChat({
@@ -623,26 +583,6 @@ export async function deleteMessageTailForUser({
     );
 
   return { ok: true, deletedCount: idsToDelete.length };
-}
-
-export async function getAssistantMessageCountByUserId(
-  userId: string,
-  hoursBack: number,
-) {
-  const db = getDb();
-  const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-  const [stats] = await db
-    .select({ count: count(messages.id) })
-    .from(messages)
-    .innerJoin(chats, eq(messages.chatId, chats.id))
-    .where(
-      and(
-        eq(chats.userId, userId),
-        eq(messages.role, 'assistant'),
-        gte(messages.createdAt, since),
-      ),
-    );
-  return stats?.count ?? 0;
 }
 
 export async function reserveAssistantGenerationSlot({

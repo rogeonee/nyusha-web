@@ -17,10 +17,10 @@ type Props<UI_MESSAGE extends UIMessage> = {
 };
 
 function extractText(message: UIMessage): string {
-  return message.parts
-    .filter((p) => p.type === 'text')
-    .map((p) => p.text)
-    .join('');
+  return message.parts.reduce(
+    (text, part) => (part.type === 'text' ? text + part.text : text),
+    '',
+  );
 }
 
 export function MessageEditor<UI_MESSAGE extends UIMessage>({
@@ -29,7 +29,7 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
   setMessages,
   regenerate,
 }: Props<UI_MESSAGE>) {
-  const [draft, setDraft] = useState(extractText(message));
+  const [draft, setDraft] = useState(() => extractText(message));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
