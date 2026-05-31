@@ -45,7 +45,8 @@ import {
   SidebarMenuSkeleton,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMounted } from '@/hooks/use-mounted';
 
 const LOADING_SKELETON_WIDTHS = ['82%', '67%', '75%', '59%'] as const;
 
@@ -77,18 +78,14 @@ export default function AppSidebar({
   user: { id: string; email: string };
 }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const { push } = useRouter();
   const queryClient = useQueryClient();
   const { setOpenMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [chatPendingDeleteId, setChatPendingDeleteId] = useState<string | null>(
     null,
   );
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const {
     data: chats = [],
@@ -106,7 +103,7 @@ export default function AppSidebar({
       toast.success('Чат удален.');
 
       if (pathname === `/chat/${deletedChatId}`) {
-        router.push('/');
+        push('/');
       }
     },
     onError: () => {
@@ -119,7 +116,7 @@ export default function AppSidebar({
     : null;
 
   const handleOpenChat = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
+    push(`/chat/${chatId}`);
     setOpenMobile(false);
   };
 
@@ -166,8 +163,8 @@ export default function AppSidebar({
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {LOADING_SKELETON_WIDTHS.map((width, index) => (
-                    <SidebarMenuItem key={index}>
+                  {LOADING_SKELETON_WIDTHS.map((width) => (
+                    <SidebarMenuItem key={width}>
                       <SidebarMenuSkeleton width={width} />
                     </SidebarMenuItem>
                   ))}

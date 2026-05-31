@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import {
   CHAT_MODEL_COOKIE_NAME,
@@ -18,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useMounted } from '@/hooks/use-mounted';
 
 const CHAT_MODEL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -34,11 +34,7 @@ export function ChatModelSelector({
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   const selectedModel = getChatModelById(selectedModelId);
   const compareByVersion = (a: ChatModel, b: ChatModel) =>
@@ -49,28 +45,6 @@ export function ChatModelSelector({
   const flashModels = [...chatModels]
     .filter((model) => model.family === 'flash')
     .sort(compareByVersion);
-
-  const renderModelItems = (models: readonly ChatModel[]) =>
-    models.map((model) => (
-      <DropdownMenuItem
-        key={model.id}
-        onSelect={() => {
-          onModelChange(model.id);
-          setChatModelCookie(model.id);
-        }}
-        className="items-start gap-2"
-      >
-        <div className="min-w-0">
-          <div className="truncate">{model.name}</div>
-          <div className="text-xs text-muted-foreground">
-            {model.description}
-          </div>
-        </div>
-        {model.id === selectedModel.id ? (
-          <Check className="ml-auto mt-0.5 size-4 shrink-0" />
-        ) : null}
-      </DropdownMenuItem>
-    ));
 
   if (!mounted) {
     return (
@@ -104,13 +78,50 @@ export function ChatModelSelector({
         <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
           Pro
         </DropdownMenuLabel>
-        {renderModelItems(proModels)}
+        <ChatModelItems
+          models={proModels}
+          selectedModelId={selectedModel.id}
+          onModelChange={onModelChange}
+        />
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
           Flash
         </DropdownMenuLabel>
-        {renderModelItems(flashModels)}
+        <ChatModelItems
+          models={flashModels}
+          selectedModelId={selectedModel.id}
+          onModelChange={onModelChange}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+function ChatModelItems({
+  models,
+  selectedModelId,
+  onModelChange,
+}: {
+  models: readonly ChatModel[];
+  selectedModelId: ChatModelId;
+  onModelChange: (modelId: ChatModelId) => void;
+}) {
+  return models.map((model) => (
+    <DropdownMenuItem
+      key={model.id}
+      onSelect={() => {
+        onModelChange(model.id);
+        setChatModelCookie(model.id);
+      }}
+      className="items-start gap-2"
+    >
+      <div className="min-w-0">
+        <div className="truncate">{model.name}</div>
+        <div className="text-xs text-muted-foreground">{model.description}</div>
+      </div>
+      {model.id === selectedModelId ? (
+        <Check className="ml-auto mt-0.5 size-4 shrink-0" />
+      ) : null}
+    </DropdownMenuItem>
+  ));
 }

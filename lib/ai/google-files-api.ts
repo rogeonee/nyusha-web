@@ -217,7 +217,7 @@ async function fetchRawWithRetry({
   throw new Error('Gemini Files API request failed.');
 }
 
-export function parseGeminiFileRef(input: string): ParsedGeminiFileRef {
+function parseGeminiFileRef(input: string): ParsedGeminiFileRef {
   const value = input.trim();
 
   if (value.length === 0) {
@@ -250,7 +250,7 @@ export function parseGeminiFileRef(input: string): ParsedGeminiFileRef {
   throw new Error('Invalid Gemini file reference.');
 }
 
-export async function getGeminiFile({
+async function getGeminiFile({
   fileNameOrUri,
   apiKey,
   timeoutMs = 20_000,

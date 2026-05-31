@@ -1,0 +1,13 @@
+packages:
+  - .
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

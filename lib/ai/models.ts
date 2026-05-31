@@ -78,18 +78,6 @@ const chatReasoningLevelById = new Map<
   ChatReasoningLevel
 >(chatReasoningLevels.map((level) => [level.id, level]));
 
-export const modelsByProvider = chatModels.reduce(
-  (acc, model) => {
-    if (!acc[model.provider]) {
-      acc[model.provider] = [];
-    }
-
-    acc[model.provider].push(model);
-    return acc;
-  },
-  {} as Record<ChatModel['provider'], ChatModel[]>,
-);
-
 export function isChatModelId(value: string): value is ChatModelId {
   return chatModelById.has(value as ChatModelId);
 }

@@ -7,37 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-
-interface ReasoningChunk {
-  title: string;
-  body: string;
-}
-
-export function parseReasoningChunks(text: string): ReasoningChunk[] {
-  const chunks: ReasoningChunk[] = [];
-  const regex = /\*\*(.+?)\*\*/g;
-  const titles: { title: string; index: number; length: number }[] = [];
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    titles.push({
-      title: match[1],
-      index: match.index,
-      length: match[0].length,
-    });
-  }
-
-  for (let i = 0; i < titles.length; i++) {
-    const start = titles[i].index + titles[i].length;
-    const end = i + 1 < titles.length ? titles[i + 1].index : text.length;
-    chunks.push({
-      title: titles[i].title,
-      body: text.slice(start, end).trim(),
-    });
-  }
-
-  return chunks;
-}
+import { parseReasoningChunks } from '@/lib/ai/reasoning';
 
 export function ReasoningBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
@@ -57,8 +27,8 @@ export function ReasoningBlock({ text }: { text: string }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1.5 space-y-2 text-sm leading-relaxed text-muted-foreground">
         {hasStructuredChunks ? (
-          chunks.map((chunk, i) => (
-            <div key={i}>
+          chunks.map((chunk) => (
+            <div key={`${chunk.title}:${chunk.body}`}>
               <div className="font-medium">{chunk.title}</div>
               {chunk.body ? <div className="mt-0.5">{chunk.body}</div> : null}
             </div>

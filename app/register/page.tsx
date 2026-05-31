@@ -1,7 +1,13 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { getCurrentUser } from '@/lib/auth/session';
 import { RegisterForm } from './register-form';
+
+export const metadata: Metadata = {
+  title: 'Register | Nyusha Chat',
+  description: 'Create an invited private family chat account.',
+};
 
 const registerErrorMessages: Record<string, string> = {
   invalid_data: 'Введите корректные email и пароль (минимум 8 символов).',
@@ -16,8 +22,7 @@ export default async function RegisterPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await getCurrentUser();
-  const { error } = await searchParams;
+  const [user, { error }] = await Promise.all([getCurrentUser(), searchParams]);
 
   if (user) {
     redirect('/');
