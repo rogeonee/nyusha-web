@@ -68,6 +68,7 @@ type PendingAttachment = {
   filename: string;
   mediaType: string;
   sizeBytes: number;
+  previewUrl?: string;
 };
 
 type ChatProps = {
@@ -267,6 +268,7 @@ export default function Chat({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const objectUrlsRef = useRef<Set<string>>(new Set());
   const currentModelIdRef = useRef<ChatModelId>(currentModelId);
   const currentReasoningLevelIdRef = useRef<ChatReasoningLevelId>(
     currentReasoningLevelId,
@@ -291,6 +293,16 @@ export default function Chat({
     },
     [],
   );
+
+  useEffect(() => {
+    const objectUrls = objectUrlsRef.current;
+    return () => {
+      for (const url of objectUrls) {
+        URL.revokeObjectURL(url);
+      }
+      objectUrls.clear();
+    };
+  }, []);
 
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
@@ -432,12 +444,22 @@ export default function Chat({
           ? part.fileId
           : null;
       const filename = part.filename?.trim() || 'Файл';
+      const url = typeof part.url === 'string' ? part.url : null;
+      // Local object URLs render instantly for a just-sent message; otherwise
+      // serve persisted files through the authenticated proxy (the Blob store
+      // is private, so raw storage URLs are not browser-loadable).
+      const src = url?.startsWith('blob:')
+        ? url
+        : fileId
+          ? `/api/files/${fileId}`
+          : url;
 
       return [
         {
           fileId,
           filename,
           mediaType: part.mediaType,
+          src,
         },
       ];
     });
@@ -581,7 +603,15 @@ export default function Chat({
               throw new Error(message);
             }
 
-            return data as PendingAttachment;
+            const attachment = data as PendingAttachment;
+
+            if (file.type.startsWith('image/')) {
+              const previewUrl = URL.createObjectURL(file);
+              objectUrlsRef.current.add(previewUrl);
+              attachment.previewUrl = previewUrl;
+            }
+
+            return attachment;
           }),
         );
 
@@ -634,7 +664,18 @@ export default function Chat({
 
   const removePendingAttachment = (fileId: string) => {
     setPendingAttachments((current) =>
-      current.filter((file) => file.fileId !== fileId),
+      current.filter((file) => {
+        if (file.fileId !== fileId) {
+          return true;
+        }
+
+        if (file.previewUrl) {
+          URL.revokeObjectURL(file.previewUrl);
+          objectUrlsRef.current.delete(file.previewUrl);
+        }
+
+        return false;
+      }),
     );
   };
 
@@ -674,7 +715,7 @@ export default function Chat({
     > = [
       ...attachmentsForMessage.map((file) => ({
         type: 'file' as const,
-        url: file.fileId,
+        url: file.previewUrl ?? file.fileId,
         mediaType: file.mediaType,
         filename: file.filename,
         fileId: file.fileId,
@@ -833,17 +874,36 @@ export default function Chat({
                             ) : null}
                             {files.length > 0 ? (
                               <div className="mb-2 flex flex-wrap gap-1.5">
-                                {files.map((file) => (
-                                  <div
-                                    key={`${message.id}-file-${file.fileId ?? file.filename}`}
-                                    className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
-                                  >
-                                    <PaperclipIcon className="size-3" />
-                                    <span className="truncate max-w-[200px]">
-                                      {file.filename}
-                                    </span>
-                                  </div>
-                                ))}
+                                {files.map((file) =>
+                                  file.mediaType?.startsWith('image/') &&
+                                  file.src ? (
+                                    <a
+                                      key={`${message.id}-file-${file.fileId ?? file.filename}`}
+                                      href={file.src}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block size-32 overflow-hidden rounded-lg border border-border/70 bg-background/70"
+                                      title={file.filename}
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied blob/object URL, not a remote asset for optimization */}
+                                      <img
+                                        src={file.src}
+                                        alt={file.filename}
+                                        className="size-full object-cover"
+                                      />
+                                    </a>
+                                  ) : (
+                                    <div
+                                      key={`${message.id}-file-${file.fileId ?? file.filename}`}
+                                      className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
+                                    >
+                                      <PaperclipIcon className="size-3" />
+                                      <span className="truncate max-w-[200px]">
+                                        {file.filename}
+                                      </span>
+                                    </div>
+                                  ),
+                                )}
                               </div>
                             ) : null}
                             {message.role === 'assistant' ? (
@@ -960,6 +1020,59 @@ export default function Chat({
         <div className="mx-auto w-full max-w-3xl">
           <Card className="p-2">
             <form onSubmit={handleSubmit} className="space-y-1.5">
+              {pendingAttachments.length > 0 ? (
+                <div className="flex flex-wrap gap-2 px-1">
+                  {pendingAttachments.map((file) =>
+                    file.previewUrl ? (
+                      <div
+                        key={file.fileId}
+                        className="group relative size-20 overflow-hidden rounded-lg border border-border/70 bg-secondary/80"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview, not a remote asset */}
+                        <img
+                          src={file.previewUrl}
+                          alt={file.filename}
+                          className="size-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-0.5 right-0.5 rounded-full bg-background/80 p-0.5 text-foreground shadow-sm transition-colors hover:bg-background"
+                          onClick={() => removePendingAttachment(file.fileId)}
+                          title="Удалить вложение"
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        key={file.fileId}
+                        className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-secondary/80 px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        <PaperclipIcon className="size-3" />
+                        <span className="max-w-[200px] truncate">
+                          {file.filename}
+                        </span>
+                        <span className="text-muted-foreground/70">
+                          {formatFileSize(file.sizeBytes)}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 transition-colors hover:bg-background"
+                          onClick={() => removePendingAttachment(file.fileId)}
+                          title="Удалить вложение"
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              ) : null}
+              {isUploading ? (
+                <p className="px-1 text-xs text-muted-foreground">
+                  Загружаем файлы...
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-1 px-1">
                 <ChatModelSelector
                   selectedModelId={currentModelId}
@@ -981,37 +1094,6 @@ export default function Chat({
                   void handleFilePickerChange(event);
                 }}
               />
-              {pendingAttachments.length > 0 ? (
-                <div className="flex flex-wrap gap-1 px-1">
-                  {pendingAttachments.map((file) => (
-                    <div
-                      key={file.fileId}
-                      className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-secondary/80 px-2 py-1 text-xs text-muted-foreground"
-                    >
-                      <PaperclipIcon className="size-3" />
-                      <span className="max-w-[200px] truncate">
-                        {file.filename}
-                      </span>
-                      <span className="text-muted-foreground/70">
-                        {formatFileSize(file.sizeBytes)}
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded p-0.5 transition-colors hover:bg-background"
-                        onClick={() => removePendingAttachment(file.fileId)}
-                        title="Удалить вложение"
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {isUploading ? (
-                <p className="px-1 text-xs text-muted-foreground">
-                  Загружаем файлы...
-                </p>
-              ) : null}
               {uploadError ? (
                 <p className="px-1 text-xs text-destructive">{uploadError}</p>
               ) : null}

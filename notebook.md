@@ -42,6 +42,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Upload finalize now treats `chat_files.storage_key` unique conflicts as idempotent retries and returns the existing row instead of deleting the blob.
 - Gemini Files refresh currently runs inline in `/api/chat` under per-file DB row locks; for family-scale this is acceptable, but high concurrency would benefit from background refresh jobs.
 - React Doctor is configured to ignore `ai-chatbot/**` because that folder is reference-only per repo policy.
+- Image attachments display as thumbnails in the composer (local object URL) and in sent messages. Because the Blob store defaults to private, raw `storageUrl` is not browser-loadable, so persisted images are served via the authenticated proxy `GET /api/files/[id]` (owner-checked). Just-sent messages use the in-session `blob:` object URL directly to avoid a round-trip; object URLs are tracked in a ref and revoked on unmount.
 
 ## Decisions Log
 

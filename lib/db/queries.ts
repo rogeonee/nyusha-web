@@ -403,6 +403,23 @@ export async function getChatFilesByIdsForUserChat({
     );
 }
 
+export async function getChatFileByIdForUser({
+  fileId,
+  userId,
+}: {
+  fileId: string;
+  userId: string;
+}) {
+  const db = getDb();
+  const [file] = await db
+    .select()
+    .from(chatFiles)
+    .where(and(eq(chatFiles.id, fileId), eq(chatFiles.userId, userId)))
+    .limit(1);
+
+  return file ?? null;
+}
+
 export async function getChatFilesByIdsForUserChatForUpdate({
   tx,
   fileIds,
