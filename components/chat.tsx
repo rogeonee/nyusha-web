@@ -53,6 +53,8 @@ import {
   type ChatReasoningLevelId,
 } from '@/lib/ai/models';
 import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
+import { useFileDropzone } from '@/lib/hooks/use-file-dropzone';
+import { FileDropOverlay } from '@/components/file-drop-overlay';
 
 const OFFLINE_ERROR_MESSAGE =
   'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
@@ -662,6 +664,18 @@ export default function Chat({
     await uploadFiles(files);
   };
 
+  const handleFilesDropped = useCallback(
+    (files: File[]) => {
+      void uploadFiles(files);
+    },
+    [uploadFiles],
+  );
+
+  const { isDragging, dropHandlers } = useFileDropzone({
+    onDrop: handleFilesDropped,
+    disabled: !isOnline,
+  });
+
   const removePendingAttachment = (fileId: string) => {
     setPendingAttachments((current) =>
       current.filter((file) => {
@@ -787,7 +801,11 @@ export default function Chat({
   );
 
   return (
-    <div className="flex h-dvh min-w-0 flex-col bg-background">
+    <div
+      className="relative flex h-dvh min-w-0 flex-col bg-background"
+      {...dropHandlers}
+    >
+      <FileDropOverlay isVisible={isDragging} />
       <ChatHeader />
 
       <div className="relative flex-1">
