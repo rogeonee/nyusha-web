@@ -17,7 +17,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - **DB schema:** `users`, `sessions`, `chats`, `messages`, `assistant_generation_reservations`, plus upload tables `chat_files` and `message_file_attachments`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone.
 - **Build/lint:** `pnpm build`, `pnpm lint` (`tsc --noEmit`), and `npx react-doctor@latest --score --full` (100) pass on the current branch.
-- **Validation:** `pnpm lint` and `pnpm build` pass after Phase 5 hardening. Browser smoke scenarios (especially auth lockout + cross-account authz) should be re-checked with two real user sessions before production rollout.
+- **Tests:** Vitest + PGlite runs 20 DB characterization tests covering quota reservations, message-tail deletion, idempotent message/attachment saves, and auth lockout arithmetic.
+- **Validation:** `pnpm test`, `pnpm lint`, and `pnpm build` pass. Browser smoke scenarios (especially auth lockout + cross-account authz) should be re-checked with two real user sessions before production rollout.
 
 ## Active Risks and Gotchas
 
@@ -69,3 +70,4 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **Blob access mode:** Upload route defaults to private access and auto-falls back to public if the connected Blob store requires it (`BLOB_ACCESS` can override default).
 - **Phase B reuse strategy:** Persisted message parts remain Blob-canonical; Gemini file URIs are used only at runtime model assembly so history stays provider-agnostic and tamper-resistant.
 - **Hydration stability:** Mounted-only client UI now uses `useSyncExternalStore` (`useMounted`) to avoid SSR/client Radix `useId` drift without mount-effect state.
+- **Migration portability:** Keep Drizzle `--> statement-breakpoint` markers between commands in migration files; the PGlite migrator executes each chunk as a prepared statement and rejects multi-command chunks.
