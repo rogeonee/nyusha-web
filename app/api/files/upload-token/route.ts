@@ -6,7 +6,7 @@ import { createChatIfAbsent, getChatById } from '@/lib/db/queries';
 import {
   ALLOWED_MEDIA_TYPES,
   MAX_UPLOAD_SIZE_BYTES,
-  isAllowedMediaType,
+  resolveMediaType,
 } from '@/lib/uploads';
 
 const uploadEventSchema = z.object({
@@ -77,6 +77,9 @@ export async function POST(request: Request) {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   if (!blobToken) {
+    console.error(
+      'Upload token unavailable: BLOB_READ_WRITE_TOKEN is missing.',
+    );
     return Response.json(
       {
         error:
@@ -102,13 +105,14 @@ export async function POST(request: Request) {
 
   const isGenerateClientTokenEvent =
     event.data.type === 'blob.generate-client-token';
-  const user = isGenerateClientTokenEvent ? await getCurrentUser() : null;
-
-  if (isGenerateClientTokenEvent && !user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   try {
+    const user = isGenerateClientTokenEvent ? await getCurrentUser() : null;
+
+    if (isGenerateClientTokenEvent && !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const jsonResponse = await handleUpload({
       token: blobToken,
       request,
@@ -120,7 +124,7 @@ export async function POST(request: Request) {
 
         const payload = parseClientPayload(clientPayload);
 
-        if (payload.mediaType && !isAllowedMediaType(payload.mediaType)) {
+        if (!resolveMediaType(payload.filename)) {
           throw new Error('Неподдерживаемый тип файла.');
         }
 
@@ -162,7 +166,6 @@ export async function POST(request: Request) {
           }),
         };
       },
-      onUploadCompleted: async () => {},
     });
 
     return Response.json(jsonResponse);
@@ -174,15 +177,22 @@ export async function POST(request: Request) {
       message === 'Unauthorized'
         ? 401
         : message === 'Not found'
-        ? 404
-        : message === 'Неподдерживаемый тип файла.' ||
-          message === 'Некорректный путь файла для этого чата.' ||
-          message === 'Некорректное имя файла в пути загрузки.' ||
-          message === 'Missing client payload.' ||
-          message === 'Invalid client payload JSON.' ||
-          message === 'Некорректное имя файла.'
-        ? 400
-        : 500;
-    return Response.json({ error: message }, { status });
+          ? 404
+          : message === 'Неподдерживаемый тип файла.' ||
+              message === 'Некорректный путь файла для этого чата.' ||
+              message === 'Некорректное имя файла в пути загрузки.' ||
+              message === 'Missing client payload.' ||
+              message === 'Invalid client payload JSON.' ||
+              message === 'Некорректное имя файла.'
+            ? 400
+            : 500;
+    const publicMessage =
+      status === 500
+        ? 'Не удалось подготовить загрузку файла.'
+        : message === 'Unauthorized'
+          ? 'Сессия истекла. Войдите снова.'
+          : message;
+
+    return Response.json({ error: publicMessage }, { status });
   }
 }

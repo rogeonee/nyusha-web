@@ -34,6 +34,8 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - Daily limiting now counts persisted assistant replies (completed generations). Aborted/failed generations before `onFinish` are not counted.
 - Assistant quota reservations auto-expire after 5 minutes; severe server interruption can temporarily undercount available slots until reservation TTL elapses.
 - File uploads require `BLOB_READ_WRITE_TOKEN`; upload/delete operations return explicit errors when missing and leave DB state unchanged.
+- Client uploads request the Blob token explicitly before `put`, so token-route errors remain visible instead of being replaced by the Blob SDK's generic error.
+- Upload media type is resolved from the filename extension via `resolveMediaType`; the browser-reported `File.type` is ignored (untrusted, varies by OS, and DnD bypasses the picker's `accept` filter — so a `.pdf` labeled `image/png` or a `.exe` labeled `application/pdf` must not be honored). The resolved canonical type is sent as the Blob `contentType` and validated identically on client and token route; filename length is guarded client-side to match the route's 255-char limit.
 - Chat delete now performs blob cleanup before DB delete; transient blob API failures will block chat deletion until retry.
 - Chat delete treats `BlobNotFoundError` as non-fatal so stale/missing blob keys do not block chat deletion.
 - Upload rollback now attempts immediate blob deletion if DB metadata insert fails after blob upload.

@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { upload as uploadToBlob } from '@vercel/blob/client';
+import { put as putToBlob } from '@vercel/blob/client';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
@@ -52,7 +52,11 @@ import {
   type ChatModelId,
   type ChatReasoningLevelId,
 } from '@/lib/ai/models';
-import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
+import {
+  MAX_FILENAME_LENGTH,
+  MAX_UPLOAD_SIZE_BYTES,
+  resolveMediaType,
+} from '@/lib/uploads';
 import { useFileDropzone } from '@/lib/hooks/use-file-dropzone';
 import { FileDropOverlay } from '@/components/file-drop-overlay';
 
@@ -224,6 +228,64 @@ function isAccessModeMismatchError(
   return attemptedAccess === 'public'
     ? message.includes('Cannot use public access on a private store')
     : message.includes('Cannot use private access on a public store');
+}
+
+async function getBlobClientToken({
+  pathname,
+  clientPayload,
+  multipart,
+}: {
+  pathname: string;
+  clientPayload: string;
+  multipart: boolean;
+}) {
+  const response = await fetch('/api/files/upload-token', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'blob.generate-client-token',
+      payload: {
+        pathname,
+        clientPayload,
+        multipart,
+      },
+    }),
+  });
+
+  let data: unknown = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data === 'object' &&
+      data !== null &&
+      'error' in data &&
+      typeof data.error === 'string'
+        ? data.error
+        : response.status === 401
+          ? 'Сессия истекла. Войдите снова.'
+          : FILE_UPLOAD_ERROR_MESSAGE;
+
+    throw new Error(message);
+  }
+
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    !('clientToken' in data) ||
+    typeof data.clientToken !== 'string'
+  ) {
+    throw new Error(FILE_UPLOAD_ERROR_MESSAGE);
+  }
+
+  return data.clientToken;
 }
 
 // react-doctor-disable-next-line react-doctor/no-giant-component -- This component owns tightly coupled chat streaming, upload, and composer state; splitting it safely is a separate behavior-preserving refactor.
@@ -536,7 +598,15 @@ export default function Chat({
       try {
         const settledUploads = await Promise.allSettled(
           files.map(async (file) => {
-            if (file.type && !isAllowedMediaType(file.type)) {
+            if (file.name.length > MAX_FILENAME_LENGTH) {
+              throw new Error('Слишком длинное имя файла.');
+            }
+
+            // Resolve the canonical type from the filename extension; the
+            // browser-reported `file.type` is untrusted and varies by OS.
+            const mediaType = resolveMediaType(file.name);
+
+            if (!mediaType) {
               throw new Error('Неподдерживаемый тип файла.');
             }
 
@@ -544,7 +614,13 @@ export default function Chat({
             const clientPayload = JSON.stringify({
               chatId: id,
               filename: file.name,
-              mediaType: file.type || undefined,
+              mediaType,
+            });
+            const multipart = file.size >= 8 * 1024 * 1024;
+            const clientToken = await getBlobClientToken({
+              pathname,
+              clientPayload,
+              multipart,
             });
 
             let blob:
@@ -556,11 +632,11 @@ export default function Chat({
             for (const access of ['private', 'public'] as const) {
               try {
                 // react-doctor-disable-next-line react-doctor/async-await-in-loop -- fallback depends on the previous Blob access-mode error.
-                blob = await uploadToBlob(pathname, file, {
+                blob = await putToBlob(pathname, file, {
                   access,
-                  handleUploadUrl: '/api/files/upload-token',
-                  clientPayload,
-                  multipart: file.size >= 8 * 1024 * 1024,
+                  token: clientToken,
+                  contentType: mediaType,
+                  multipart,
                 });
                 break;
               } catch (uploadError) {
@@ -607,7 +683,7 @@ export default function Chat({
 
             const attachment = data as PendingAttachment;
 
-            if (file.type.startsWith('image/')) {
+            if (mediaType.startsWith('image/')) {
               const previewUrl = URL.createObjectURL(file);
               objectUrlsRef.current.add(previewUrl);
               attachment.previewUrl = previewUrl;
