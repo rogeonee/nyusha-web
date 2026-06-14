@@ -75,17 +75,23 @@ export const chats = pgTable('chats', {
     .defaultNow(),
 });
 
-export const messages = pgTable('messages', {
-  id: text('id').primaryKey().notNull(),
-  chatId: uuid('chat_id')
-    .notNull()
-    .references(() => chats.id, { onDelete: 'cascade' }),
-  role: varchar('role', { length: 20 }).notNull(),
-  parts: json('parts').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const messages = pgTable(
+  'messages',
+  {
+    id: text('id').primaryKey().notNull(),
+    chatId: uuid('chat_id')
+      .notNull()
+      .references(() => chats.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 20 }).notNull(),
+    parts: json('parts').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('messages_chat_created_idx').on(table.chatId, table.createdAt),
+  ],
+);
 
 export const chatFiles = pgTable(
   'chat_files',
