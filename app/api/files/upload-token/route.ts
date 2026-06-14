@@ -6,7 +6,9 @@ import { createChatIfAbsent, getChatById } from '@/lib/db/queries';
 import {
   ALLOWED_MEDIA_TYPES,
   MAX_UPLOAD_SIZE_BYTES,
+  isUploadPathOwnedByChat,
   resolveMediaType,
+  uploadPathMatchesFilename,
 } from '@/lib/uploads';
 
 const uploadEventSchema = z.object({
@@ -22,32 +24,6 @@ const clientPayloadSchema = z.object({
     .max(255, 'Некорректное имя файла.'),
   mediaType: z.string().trim().min(1).max(255).optional(),
 });
-
-function sanitizeFilename(value: string) {
-  const normalized = value.trim().replace(/\s+/g, '-');
-  const cleaned = normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const collapsed = cleaned.replace(/-+/g, '-');
-  const clipped = collapsed.slice(0, 120);
-
-  return clipped.length > 0 ? clipped : 'file';
-}
-
-function isPathnameOwnedByChat(pathname: string, chatId: string) {
-  return (
-    pathname.startsWith(`${chatId}/`) &&
-    !pathname.includes('..') &&
-    !pathname.includes('\\')
-  );
-}
-
-function pathnameMatchesFilename(pathname: string, filename: string) {
-  const basename = pathname.split('/').pop() ?? '';
-  const sanitizedFilename = sanitizeFilename(filename);
-
-  return (
-    basename === sanitizedFilename || basename.endsWith(`-${sanitizedFilename}`)
-  );
-}
 
 function parseClientPayload(clientPayload: string | null) {
   if (!clientPayload) {
@@ -147,11 +123,11 @@ export async function POST(request: Request) {
           throw new Error('Not found');
         }
 
-        if (!isPathnameOwnedByChat(pathname, payload.chatId)) {
+        if (!isUploadPathOwnedByChat(pathname, payload.chatId)) {
           throw new Error('Некорректный путь файла для этого чата.');
         }
 
-        if (!pathnameMatchesFilename(pathname, payload.filename)) {
+        if (!uploadPathMatchesFilename(pathname, payload.filename)) {
           throw new Error('Некорректное имя файла в пути загрузки.');
         }
 

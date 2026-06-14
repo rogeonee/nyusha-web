@@ -6,7 +6,11 @@ import {
   getChatById,
   getChatFileByStorageKeyForUserChat,
 } from '@/lib/db/queries';
-import { MAX_UPLOAD_SIZE_BYTES, isAllowedMediaType } from '@/lib/uploads';
+import {
+  MAX_UPLOAD_SIZE_BYTES,
+  isAllowedMediaType,
+  isUploadPathOwnedByChat,
+} from '@/lib/uploads';
 const finalizeUploadSchema = z.object({
   chatId: z.uuid(),
   pathname: z
@@ -16,14 +20,6 @@ const finalizeUploadSchema = z.object({
     .max(512, 'Некорректный путь файла.'),
   filename: z.string().trim().min(1).max(255).optional(),
 });
-
-function isPathnameOwnedByChat(pathname: string, chatId: string) {
-  return (
-    pathname.startsWith(`${chatId}/`) &&
-    !pathname.includes('..') &&
-    !pathname.includes('\\')
-  );
-}
 
 function isStorageKeyUniqueConflict(error: unknown) {
   if (!error || typeof error !== 'object') {
@@ -104,7 +100,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }
 
-  if (!isPathnameOwnedByChat(pathname, chatId)) {
+  if (!isUploadPathOwnedByChat(pathname, chatId)) {
     return Response.json(
       { error: 'Некорректный путь файла для этого чата.' },
       { status: 400 },

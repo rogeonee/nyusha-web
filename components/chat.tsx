@@ -56,6 +56,7 @@ import {
   MAX_FILENAME_LENGTH,
   MAX_UPLOAD_SIZE_BYTES,
   resolveMediaType,
+  sanitizeUploadFilename,
 } from '@/lib/uploads';
 import { useFileDropzone } from '@/lib/hooks/use-file-dropzone';
 import { FileDropOverlay } from '@/components/file-drop-overlay';
@@ -200,19 +201,8 @@ function formatFileSize(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function sanitizeFilename(value: string) {
-  const normalized = value.trim().replace(/\s+/g, '-');
-  const cleaned = normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const collapsed = cleaned.replace(/-+/g, '-');
-  const clipped = collapsed.slice(0, 120);
-
-  return clipped.length > 0 ? clipped : 'file';
-}
-
 function buildStoragePath(chatId: string, filename: string) {
-  return `${chatId}/${Date.now()}-${crypto.randomUUID()}-${sanitizeFilename(
-    filename,
-  )}`;
+  return `${chatId}/${Date.now()}-${crypto.randomUUID()}-${sanitizeUploadFilename(filename)}`;
 }
 
 function isAccessModeMismatchError(

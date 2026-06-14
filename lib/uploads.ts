@@ -19,6 +19,40 @@ export function isAllowedMediaType(type: string): type is AllowedMediaType {
   return ALLOWED_MEDIA_TYPES.includes(type as AllowedMediaType);
 }
 
+export function sanitizeUploadFilename(value: string) {
+  const normalized = value.trim().replace(/\s+/g, '-');
+  const cleaned = normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const collapsed = cleaned.replace(/-+/g, '-');
+  const clipped = collapsed.slice(0, 120);
+
+  return clipped.length > 0 ? clipped : 'file';
+}
+
+export function isUploadPathOwnedByChat(pathname: string, chatId: string) {
+  const segments = pathname.split('/');
+
+  return (
+    segments.length === 2 &&
+    segments[0] === chatId &&
+    segments[1].length > 0 &&
+    segments[1] !== '.' &&
+    segments[1] !== '..' &&
+    !pathname.includes('\\')
+  );
+}
+
+export function uploadPathMatchesFilename(
+  pathname: string,
+  filename: string,
+) {
+  const basename = pathname.split('/').pop() ?? '';
+  const sanitizedFilename = sanitizeUploadFilename(filename);
+
+  return (
+    basename === sanitizedFilename || basename.endsWith(`-${sanitizedFilename}`)
+  );
+}
+
 // Canonical type per supported file extension. The extension is the
 // authoritative signal for an upload's type (see `resolveMediaType`).
 const EXTENSION_MEDIA_TYPES: Record<string, AllowedMediaType> = {

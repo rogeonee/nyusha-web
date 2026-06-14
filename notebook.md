@@ -37,6 +37,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 - File uploads require `BLOB_READ_WRITE_TOKEN`; upload/delete operations return explicit errors when missing and leave DB state unchanged.
 - Client uploads request the Blob token explicitly before `put`, so token-route errors remain visible instead of being replaced by the Blob SDK's generic error.
 - Upload media type is resolved from the filename extension via `resolveMediaType`; the browser-reported `File.type` is ignored (untrusted, varies by OS, and DnD bypasses the picker's `accept` filter — so a `.pdf` labeled `image/png` or a `.exe` labeled `application/pdf` must not be honored). The resolved canonical type is sent as the Blob `contentType` and validated identically on client and token route; filename length is guarded client-side to match the route's 255-char limit.
+- Upload path ownership is validated by path segments, not a blanket `pathname.includes('..')` check; repeated dots are valid inside filenames such as `report..pdf`, while `.`/`..` traversal segments and nested paths remain rejected.
 - Chat delete now performs blob cleanup before DB delete; transient blob API failures will block chat deletion until retry.
 - Chat delete treats `BlobNotFoundError` as non-fatal so stale/missing blob keys do not block chat deletion.
 - Upload rollback now attempts immediate blob deletion if DB metadata insert fails after blob upload.
