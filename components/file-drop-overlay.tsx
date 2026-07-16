@@ -46,7 +46,7 @@ export function FileDropOverlay({ isVisible }: FileDropOverlayProps) {
                   the entrance spring flattens its transform — and vanish. */}
               <m.div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.14),transparent_70%)]"
+                className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--primary)_14%,transparent),transparent_70%)]"
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{
                   duration: 2.6,
