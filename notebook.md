@@ -60,7 +60,7 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 - **Provider scope:** Gemini-only to spend GCP credits; AI Gateway/non-Google provider work is deferred as a side track (not a numbered phase).
 - **Sidebar:** Uses shadcn sidebar primitives instead of custom implementation. Cookie-based collapse persistence, defaults to collapsed.
 - **Lint script:** `tsc --noEmit` (not `next lint`) because Next 16 dropped the previous invocation.
-- **Tailwind v4:** Compatibility migration — kept existing theme tokens, switched PostCSS plugin to `@tailwindcss/postcss`, `globals.css` imports Tailwind and references `tailwind.config.ts`.
+- **shadcn/Tailwind v4:** Keep the established Radix UI behavior and visual classes, but use the current `new-york`/Radix registry, unified `radix-ui` package, CSS-first `@theme inline` tokens, and `tw-animate-css`; do not overwrite primitives from the registry because current defaults intentionally restyle controls.
 - **Chat API trust model:** Server now treats DB history as canonical and uses client payload only for the latest user message plus transport trigger metadata (`submit-message`/`regenerate-message`).
 - **Rate limit metric:** Switched from user message count to assistant reply count so duplicate message-id replay cannot bypass limits.
 - **Quota concurrency control:** Added DB reservation slots (`assistant_generation_reservations`) checked in a transaction before streaming to prevent parallel requests from overshooting daily assistant limits.
