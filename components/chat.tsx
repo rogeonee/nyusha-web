@@ -12,7 +12,7 @@ import { useChat } from '@ai-sdk/react';
 import { put as putToBlob } from '@vercel/blob/client';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useQueryClient } from '@tanstack/react-query';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { IconArrowUp, IconStop } from '@/components/ui/icons';
@@ -60,6 +60,14 @@ import {
 } from '@/lib/uploads';
 import { useFileDropzone } from '@/lib/hooks/use-file-dropzone';
 import { FileDropOverlay } from '@/components/file-drop-overlay';
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller';
 
 const OFFLINE_ERROR_MESSAGE =
   'Нет подключения к интернету. Проверьте соединение и попробуйте снова.';
@@ -278,8 +286,12 @@ async function getBlobClientToken({
   return data.clientToken;
 }
 
+export default function Chat({ id, ...props }: ChatProps) {
+  return <ChatSession key={id} id={id} {...props} />;
+}
+
 // react-doctor-disable-next-line react-doctor/no-giant-component -- This component owns tightly coupled chat streaming, upload, and composer state; splitting it safely is a separate behavior-preserving refactor.
-export default function Chat({
+function ChatSession({
   id,
   initialMessages = EMPTY_INITIAL_MESSAGES,
   initialChatModel = DEFAULT_CHAT_MODEL,
@@ -317,9 +329,9 @@ export default function Chat({
     isUploading: false,
     error: null,
   });
+
   const currentModelId = chatPreferences.modelId;
   const currentReasoningLevelId = chatPreferences.reasoningLevelId;
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
@@ -328,7 +340,6 @@ export default function Chat({
     currentReasoningLevelId,
   );
   const sendTimeRef = useRef<number>(0);
-  const { replace } = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const { isRegenerating, error: regenerateError } = regenerationState;
@@ -399,7 +410,8 @@ export default function Chat({
     }),
     onFinish: () => {
       if (pathname === '/') {
-        replace(`/chat/${id}`);
+        window.history.replaceState(null, '', `/chat/${id}`);
+        document.title = 'Chat | Nyusha Chat';
       }
       queryClient.invalidateQueries({ queryKey: ['chats'] });
     },
@@ -446,20 +458,14 @@ export default function Chat({
   const lastAssistantMessage = [...messages]
     .reverse()
     .find((m) => m.role === 'assistant');
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === 'user');
   const assistantHasText =
     lastAssistantMessage?.parts.some(
       (p) => p.type === 'text' && p.text.length > 0,
     ) ?? false;
   const isThinking = isAwaitingResponse && !assistantHasText;
-
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: status === 'streaming' ? 'auto' : 'smooth',
-    });
-  }, [messages, status]);
 
   // react-doctor-disable-next-line react-doctor/no-cascading-set-state -- the notice is a timer-driven side effect of the current request lifecycle.
   useEffect(() => {
@@ -875,229 +881,279 @@ export default function Chat({
       <ChatHeader />
 
       <div className="relative flex-1">
-        <div ref={scrollRef} className="absolute inset-0 overflow-y-auto">
-          <div className="mx-auto flex max-w-3xl flex-col gap-4 px-2 sm:px-4">
-            {!isOnline && (
-              <div className="mx-auto mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-                Нет соединения с интернетом
-              </div>
-            )}
-            {messages.length <= 0 ? (
-              <div className="mx-auto mt-10 w-full max-w-xl">
-                <AboutCard />
-              </div>
-            ) : (
-              <div className="mt-10 w-full">
-                {messages.map((message) => {
-                  const text = getMessageText(message);
-                  const files = getMessageFiles(message);
-                  const hasSources = message.parts.some(
-                    (part) =>
-                      part.type === 'source-url' ||
-                      part.type === 'source-document',
-                  );
-                  const hasText = text.trim().length > 0;
-
-                  if (
-                    message.role === 'assistant' &&
-                    !hasText &&
-                    files.length === 0 &&
-                    !hasSources
-                  ) {
-                    return null;
-                  }
-
-                  const reasoning =
-                    message.role === 'assistant'
-                      ? getReasoningText(message)
-                      : '';
-
-                  const isLastAssistant =
-                    message.role === 'assistant' &&
-                    message.id === lastAssistantMessage?.id;
-
-                  const isEditing = editingMessageId === message.id;
-
-                  return (
-                    <div
-                      key={message.id}
-                      className={`mb-5 flex flex-col ${
-                        message.role === 'user'
-                          ? 'group items-end'
-                          : 'items-start'
-                      }`}
-                    >
-                      <div
-                        className={`group relative ${
-                          message.role === 'user'
-                            ? `${
-                                isEditing ? 'w-full ' : ''
-                              }max-w-[85%] whitespace-pre-wrap`
-                            : 'w-full'
-                        }`}
-                      >
-                        {isEditing ? (
-                          <MessageEditor
-                            message={message}
-                            setMode={(mode) => {
-                              if (mode === 'view') setEditingMessageId(null);
-                            }}
-                            setMessages={setMessages}
-                            regenerate={regenerate}
-                          />
-                        ) : (
-                          <div
-                            className={`${
-                              message.role === 'user'
-                                ? 'bg-secondary'
-                                : 'bg-transparent w-full'
-                            } rounded-lg p-2`}
-                          >
-                            {reasoning ? (
-                              <ReasoningBlock text={reasoning} />
-                            ) : null}
-                            {files.length > 0 ? (
-                              <div className="mb-2 flex flex-wrap gap-1.5">
-                                {files.map((file) =>
-                                  file.mediaType?.startsWith('image/') &&
-                                  file.src ? (
-                                    <a
-                                      key={`${message.id}-file-${file.fileId ?? file.filename}`}
-                                      href={file.src}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="block size-32 overflow-hidden rounded-lg border border-border/70 bg-background/70"
-                                      title={file.filename}
-                                    >
-                                      {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied blob/object URL, not a remote asset for optimization */}
-                                      <img
-                                        src={file.src}
-                                        alt={file.filename}
-                                        className="size-full object-cover"
-                                      />
-                                    </a>
-                                  ) : (
-                                    <div
-                                      key={`${message.id}-file-${file.fileId ?? file.filename}`}
-                                      className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
-                                    >
-                                      <PaperclipIcon className="size-3" />
-                                      <span className="truncate max-w-[200px]">
-                                        {file.filename}
-                                      </span>
-                                    </div>
-                                  ),
-                                )}
-                              </div>
-                            ) : null}
-                            {message.role === 'assistant' ? (
-                              <>
-                                <Streamdown
-                                  className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
-                                  plugins={{ math: mathPlugin }}
-                                >
-                                  {text}
-                                </Streamdown>
-                                <MessageSources parts={message.parts} />
-                              </>
-                            ) : (
-                              text
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {message.role === 'user' &&
-                        !isAwaitingResponse &&
-                        !isEditing &&
-                        hasText && (
-                          <UserMessageActions
-                            text={text}
-                            onEdit={() => setEditingMessageId(message.id)}
-                          />
-                        )}
-
-                      {isLastAssistant && status === 'ready' && (
-                        <AssistantMessageActions
-                          text={text}
-                          latencyMs={lastLatencyMs}
-                          onRegenerate={() => void handleRegenerate(message.id)}
-                          isDisabled={isRegenerating || !isOnline}
-                        />
-                      )}
+        <MessageScrollerProvider
+          autoScroll
+          defaultScrollPosition="last-anchor"
+          scrollPreviousItemPeek={64}
+        >
+          <MessageScroller className="absolute inset-0">
+            <MessageScrollerViewport aria-label="Сообщения чата">
+              <MessageScrollerContent
+                aria-busy={isAwaitingResponse}
+                className={`mx-auto w-full max-w-3xl gap-0 px-2 sm:px-4 ${
+                  messages.length > 0 ? 'pt-10' : ''
+                }`}
+              >
+                {!isOnline && (
+                  <MessageScrollerItem
+                    messageId="offline-status"
+                    className={messages.length > 0 ? '-mt-6 mb-10' : ''}
+                  >
+                    <div className="mx-auto mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                      Нет соединения с интернетом
                     </div>
-                  );
-                })}
-                {isThinking ? (
-                  <div className="mb-5 flex whitespace-pre-wrap">
-                    <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
-                      {normalizedStreamingReasoningText ? (
-                        <Collapsible>
-                          <div className="flex items-center gap-3">
-                            <CollapsibleTrigger className="group/trigger flex items-center gap-1 transition-colors hover:text-foreground">
-                              <ChevronRight className="size-3 transition-transform group-data-[state=open]/trigger:rotate-90" />
-                              <TextShimmer className="text-sm" duration={3}>
-                                {latestChunkTitle}
-                              </TextShimmer>
-                            </CollapsibleTrigger>
-                            <span className="text-xs tabular-nums text-muted-foreground/80">
-                              {formatElapsedThinking(thinkingElapsedMs)}
-                            </span>
-                          </div>
-                          <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
-                            {hasStructuredStreamingChunks ? (
-                              streamingChunks.map((chunk) => (
-                                <div key={`${chunk.title}:${chunk.body}`}>
-                                  <div className="font-medium">
-                                    {chunk.title}
-                                  </div>
-                                  {chunk.body ? (
-                                    <div className="mt-0.5">{chunk.body}</div>
-                                  ) : null}
-                                </div>
-                              ))
-                            ) : (
-                              <div className="whitespace-pre-wrap">
-                                {normalizedStreamingReasoningText}
-                              </div>
-                            )}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      ) : (
-                        <div className="flex items-center gap-3">
-                          <TextShimmer className="text-sm" duration={3}>
-                            {`${
-                              getChatModelById(currentModelId).name
-                            } думает...`}
-                          </TextShimmer>
-                          <span className="text-xs tabular-nums text-muted-foreground/80">
-                            {formatElapsedThinking(thinkingElapsedMs)}
-                          </span>
-                        </div>
-                      )}
-                      {showLongWaitNotice ? (
-                        <div className="mt-2 leading-relaxed">
-                          Это может занять чуть больше времени. Все в порядке,
-                          запрос еще обрабатывается.
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-                {status === 'error' && error && (
-                  <div className="mb-4 text-sm text-destructive">
-                    Ошибка: {error.message}
-                  </div>
+                  </MessageScrollerItem>
                 )}
-                {regenerateError ? (
-                  <div className="mb-4 text-sm text-destructive">
-                    Ошибка: {regenerateError}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
+                {messages.length <= 0 ? (
+                  <MessageScrollerItem messageId="empty-chat">
+                    <div className="mx-auto mt-10 w-full max-w-xl">
+                      <AboutCard />
+                    </div>
+                  </MessageScrollerItem>
+                ) : (
+                  <>
+                    {messages.map((message) => {
+                      const text = getMessageText(message);
+                      const files = getMessageFiles(message);
+                      const hasSources = message.parts.some(
+                        (part) =>
+                          part.type === 'source-url' ||
+                          part.type === 'source-document',
+                      );
+                      const hasText = text.trim().length > 0;
+
+                      if (
+                        message.role === 'assistant' &&
+                        !hasText &&
+                        files.length === 0 &&
+                        !hasSources
+                      ) {
+                        return null;
+                      }
+
+                      const reasoning =
+                        message.role === 'assistant'
+                          ? getReasoningText(message)
+                          : '';
+
+                      const isLastAssistant =
+                        message.role === 'assistant' &&
+                        message.id === lastAssistantMessage?.id;
+
+                      const isEditing = editingMessageId === message.id;
+
+                      return (
+                        <MessageScrollerItem
+                          key={message.id}
+                          messageId={message.id}
+                          scrollAnchor={message.role === 'user'}
+                          className="mb-5"
+                        >
+                          <div
+                            className={`flex flex-col ${
+                              message.role === 'user'
+                                ? 'group items-end'
+                                : 'items-start'
+                            }`}
+                          >
+                            <div
+                              className={`group relative ${
+                                message.role === 'user'
+                                  ? `${
+                                      isEditing ? 'w-full ' : ''
+                                    }max-w-[85%] whitespace-pre-wrap`
+                                  : 'w-full'
+                              }`}
+                            >
+                              {isEditing ? (
+                                <MessageEditor
+                                  message={message}
+                                  setMode={(mode) => {
+                                    if (mode === 'view')
+                                      setEditingMessageId(null);
+                                  }}
+                                  setMessages={setMessages}
+                                  regenerate={regenerate}
+                                />
+                              ) : (
+                                <div
+                                  className={`${
+                                    message.role === 'user'
+                                      ? 'bg-secondary'
+                                      : 'bg-transparent w-full'
+                                  } rounded-lg p-2`}
+                                >
+                                  {reasoning ? (
+                                    <ReasoningBlock text={reasoning} />
+                                  ) : null}
+                                  {files.length > 0 ? (
+                                    <div className="mb-2 flex flex-wrap gap-1.5">
+                                      {files.map((file) =>
+                                        file.mediaType?.startsWith('image/') &&
+                                        file.src ? (
+                                          <a
+                                            key={`${message.id}-file-${file.fileId ?? file.filename}`}
+                                            href={file.src}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="block size-32 overflow-hidden rounded-lg border border-border/70 bg-background/70"
+                                            title={file.filename}
+                                          >
+                                            {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied blob/object URL, not a remote asset for optimization */}
+                                            <img
+                                              src={file.src}
+                                              alt={file.filename}
+                                              className="size-full object-cover"
+                                            />
+                                          </a>
+                                        ) : (
+                                          <div
+                                            key={`${message.id}-file-${file.fileId ?? file.filename}`}
+                                            className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
+                                          >
+                                            <PaperclipIcon className="size-3" />
+                                            <span className="truncate max-w-[200px]">
+                                              {file.filename}
+                                            </span>
+                                          </div>
+                                        ),
+                                      )}
+                                    </div>
+                                  ) : null}
+                                  {message.role === 'assistant' ? (
+                                    <>
+                                      <Streamdown
+                                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                        plugins={{ math: mathPlugin }}
+                                      >
+                                        {text}
+                                      </Streamdown>
+                                      <MessageSources parts={message.parts} />
+                                    </>
+                                  ) : (
+                                    text
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {message.role === 'user' &&
+                              !isAwaitingResponse &&
+                              !isEditing &&
+                              hasText && (
+                                <UserMessageActions
+                                  text={text}
+                                  onEdit={() => setEditingMessageId(message.id)}
+                                />
+                              )}
+
+                            {isLastAssistant && status === 'ready' && (
+                              <AssistantMessageActions
+                                text={text}
+                                latencyMs={lastLatencyMs}
+                                onRegenerate={() =>
+                                  void handleRegenerate(message.id)
+                                }
+                                isDisabled={isRegenerating || !isOnline}
+                              />
+                            )}
+                          </div>
+                        </MessageScrollerItem>
+                      );
+                    })}
+                    {isThinking ? (
+                      <MessageScrollerItem
+                        messageId={`${lastUserMessage?.id ?? id}:thinking`}
+                        className="mb-5"
+                      >
+                        <div className="flex whitespace-pre-wrap">
+                          <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
+                            {normalizedStreamingReasoningText ? (
+                              <Collapsible>
+                                <div className="flex items-center gap-3">
+                                  <CollapsibleTrigger className="group/trigger flex items-center gap-1 transition-colors hover:text-foreground">
+                                    <ChevronRight className="size-3 transition-transform group-data-[state=open]/trigger:rotate-90" />
+                                    <TextShimmer
+                                      className="text-sm"
+                                      duration={3}
+                                    >
+                                      {latestChunkTitle}
+                                    </TextShimmer>
+                                  </CollapsibleTrigger>
+                                  <span className="text-xs tabular-nums text-muted-foreground/80">
+                                    {formatElapsedThinking(thinkingElapsedMs)}
+                                  </span>
+                                </div>
+                                <CollapsibleContent className="mt-1.5 space-y-2 pl-4">
+                                  {hasStructuredStreamingChunks ? (
+                                    streamingChunks.map((chunk) => (
+                                      <div key={`${chunk.title}:${chunk.body}`}>
+                                        <div className="font-medium">
+                                          {chunk.title}
+                                        </div>
+                                        {chunk.body ? (
+                                          <div className="mt-0.5">
+                                            {chunk.body}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="whitespace-pre-wrap">
+                                      {normalizedStreamingReasoningText}
+                                    </div>
+                                  )}
+                                </CollapsibleContent>
+                              </Collapsible>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <TextShimmer className="text-sm" duration={3}>
+                                  {`${
+                                    getChatModelById(currentModelId).name
+                                  } думает...`}
+                                </TextShimmer>
+                                <span className="text-xs tabular-nums text-muted-foreground/80">
+                                  {formatElapsedThinking(thinkingElapsedMs)}
+                                </span>
+                              </div>
+                            )}
+                            {showLongWaitNotice ? (
+                              <div className="mt-2 leading-relaxed">
+                                Это может занять чуть больше времени. Все в
+                                порядке, запрос еще обрабатывается.
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </MessageScrollerItem>
+                    ) : null}
+                    {status === 'error' && error && (
+                      <MessageScrollerItem
+                        messageId={`${lastUserMessage?.id ?? id}:stream-error`}
+                        className="mb-4"
+                      >
+                        <div className="text-sm text-destructive">
+                          Ошибка: {error.message}
+                        </div>
+                      </MessageScrollerItem>
+                    )}
+                    {regenerateError ? (
+                      <MessageScrollerItem
+                        messageId={`${lastUserMessage?.id ?? id}:regeneration-error`}
+                        className="mb-4"
+                      >
+                        <div className="text-sm text-destructive">
+                          Ошибка: {regenerateError}
+                        </div>
+                      </MessageScrollerItem>
+                    ) : null}
+                  </>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton aria-label="К последнему сообщению" />
+          </MessageScroller>
+        </MessageScrollerProvider>
       </div>
 
       <div className="sticky bottom-0 bg-background px-2 pb-4 sm:px-4">
