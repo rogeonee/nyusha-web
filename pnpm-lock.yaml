@@ -14,6 +14,9 @@ importers:
       '@ai-sdk/react':
         specifier: ^3.0.79
         version: 3.0.79(react@19.2.4)(zod@4.3.6)
+      '@shadcn/react':
+        specifier: 0.2.1
+        version: 0.2.1(@types/react@19.2.13)(react@19.2.4)
       '@streamdown/math':
         specifier: ^1.0.2
         version: 1.0.2(react@19.2.4)
@@ -1514,6 +1517,17 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@shadcn/react@0.2.1':
+    resolution: {integrity: sha512-5krgi3dRMKb5jH6a+qPzVJUy/54s0kKE4Rw4LjDfLqOdVQTWKUgxWf1kW8r912I0jX/Lzxqc+pgjkjWxUIK5BQ==}
+    peerDependencies:
+      '@types/react': '>=19'
+      react: '>=19'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      react:
+        optional: true
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -4162,6 +4176,11 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@shadcn/react@0.2.1(@types/react@19.2.13)(react@19.2.4)':
+    optionalDependencies:
+      '@types/react': 19.2.13
+      react: 19.2.4
 
   '@standard-schema/spec@1.1.0': {}
 
