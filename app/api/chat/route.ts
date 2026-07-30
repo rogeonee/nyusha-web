@@ -6,7 +6,6 @@ import {
   type ProviderMetadata,
   type UIMessage,
 } from 'ai';
-import { google } from '@ai-sdk/google';
 import mammoth from 'mammoth';
 import { BlobNotFoundError, del } from '@vercel/blob';
 import { DOCX_MEDIA_TYPE } from '@/lib/uploads';
@@ -18,14 +17,18 @@ import {
   DEFAULT_CHAT_REASONING_LEVEL,
   getChatModelById,
   getFallbackChatModelId,
-  getThinkingConfigForModel,
   isChatModelId,
-  isChatReasoningLevelId,
+  isKnownChatReasoningLevelId,
   resolveChatModelId,
+  resolveChatReasoningLevelId,
   type ChatModelId,
   type ChatReasoningLevelId,
 } from '@/lib/ai/models';
-import { getLanguageModel } from '@/lib/ai/providers';
+import {
+  getLanguageModel,
+  getProviderOptionsForModel,
+  getWebSearchToolsForModel,
+} from '@/lib/ai/providers';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getDb } from '@/lib/db';
 import {
@@ -750,7 +753,7 @@ export async function POST(request: Request) {
   const requestedReasoningLevelValue =
     selectedReasoningLevel ?? DEFAULT_CHAT_REASONING_LEVEL;
 
-  if (!isChatReasoningLevelId(requestedReasoningLevelValue)) {
+  if (!isKnownChatReasoningLevelId(requestedReasoningLevelValue)) {
     return Response.json(
       { error: `Unknown reasoning level: ${requestedReasoningLevelValue}` },
       { status: 400 },
@@ -758,8 +761,9 @@ export async function POST(request: Request) {
   }
 
   const requestedModelId = selectedChatModel as ChatModelId;
-  const requestedReasoningLevelId =
-    requestedReasoningLevelValue as ChatReasoningLevelId;
+  const requestedReasoningLevelId = resolveChatReasoningLevelId(
+    requestedReasoningLevelValue,
+  );
   const lastUserMessage = requestBody.latestUserMessage as UIMessage;
 
   if (
@@ -935,17 +939,11 @@ export async function POST(request: Request) {
           model,
           system: `Ты ${chatModel.name}, ассистент готовый помочь с ежедневными вопросами и задачами.`,
           messages: await convertToModelMessages(runtimeContext.messages),
-          tools: {
-            google_search: google.tools.googleSearch({}),
-          },
-          providerOptions: {
-            google: {
-              thinkingConfig: getThinkingConfigForModel({
-                model: chatModel,
-                reasoningLevelId: requestedReasoningLevelId,
-              }),
-            },
-          },
+          tools: getWebSearchToolsForModel(chatModel),
+          providerOptions: getProviderOptionsForModel({
+            model: chatModel,
+            reasoningLevelId: requestedReasoningLevelId,
+          }),
           experimental_download: downloadAssetsForModel,
         });
 
