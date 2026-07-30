@@ -1,11 +1,12 @@
 'use client';
 
+import { Fragment } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import {
   CHAT_MODEL_COOKIE_NAME,
+  chatModelProviders,
   chatModels,
   getChatModelById,
-  type ChatModel,
   type ChatModelId,
 } from '@/lib/ai/models';
 import { Button } from '@/components/ui/button';
@@ -37,14 +38,6 @@ export function ChatModelSelector({
   const mounted = useMounted();
 
   const selectedModel = getChatModelById(selectedModelId);
-  const compareByVersion = (a: ChatModel, b: ChatModel) =>
-    Number.parseFloat(a.shortName) - Number.parseFloat(b.shortName);
-  const proModels = [...chatModels]
-    .filter((model) => model.family === 'pro')
-    .sort(compareByVersion);
-  const flashModels = [...chatModels]
-    .filter((model) => model.family === 'flash')
-    .sort(compareByVersion);
 
   if (!mounted) {
     return (
@@ -75,23 +68,21 @@ export function ChatModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
-          Pro
-        </DropdownMenuLabel>
-        <ChatModelItems
-          models={proModels}
-          selectedModelId={selectedModel.id}
-          onModelChange={onModelChange}
-        />
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
-          Flash
-        </DropdownMenuLabel>
-        <ChatModelItems
-          models={flashModels}
-          selectedModelId={selectedModel.id}
-          onModelChange={onModelChange}
-        />
+        {chatModelProviders.map((provider, index) => (
+          <Fragment key={provider.id}>
+            {index > 0 ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
+              {provider.name}
+            </DropdownMenuLabel>
+            <ChatModelItems
+              models={chatModels.filter(
+                (model) => model.provider === provider.id,
+              )}
+              selectedModelId={selectedModel.id}
+              onModelChange={onModelChange}
+            />
+          </Fragment>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -102,7 +93,7 @@ function ChatModelItems({
   selectedModelId,
   onModelChange,
 }: {
-  models: readonly ChatModel[];
+  models: readonly (typeof chatModels)[number][];
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
 }) {
