@@ -71,6 +71,13 @@
       "when": 1781399007402,
       "tag": "0009_outgoing_cerise",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788397768722,
+      "tag": "0010_hard_hitman",
+      "breakpoints": true
     }
   ]
 }

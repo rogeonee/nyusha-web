@@ -44,12 +44,12 @@ export type ChatReasoningLevelId = ChatReasoningLevel['id'];
 
 export const chatModels = [
   {
-    id: 'google/gemini-3.5-flash',
-    name: 'Gemini 3.5 Flash',
-    shortName: '3.5 Flash',
+    id: 'google/gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    shortName: '3.8 Flash',
     provider: 'google',
     description: 'Default frontier Flash model for everyday coding and tasks',
-    sdkModelId: 'gemini-3.5-flash',
+    sdkModelId: 'gemini-3.8-flash',
     thinkingConfig: { thinkingLevel: 'medium', includeThoughts: true },
   },
   {
@@ -82,18 +82,19 @@ export const chatModels = [
 export type ChatModel = (typeof chatModels)[number];
 export type ChatModelId = ChatModel['id'];
 
-export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-3.5-flash';
+export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-3.8-flash';
 export const DEFAULT_CHAT_REASONING_LEVEL: ChatReasoningLevelId = 'medium';
 const MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
-  'google/gemini-3.1-pro-preview': 'google/gemini-3.5-flash',
-  'google/gemini-3.5-flash': 'openai/gpt-5.6-luna',
-  'openai/gpt-5.6-luna': 'google/gemini-3.5-flash',
-  'openai/gpt-5.6-terra': 'google/gemini-3.5-flash',
+  'google/gemini-3.1-pro-preview': 'google/gemini-3.8-flash',
+  'google/gemini-3.8-flash': 'openai/gpt-5.6-luna',
+  'openai/gpt-5.6-luna': 'google/gemini-3.8-flash',
+  'openai/gpt-5.6-terra': 'google/gemini-3.8-flash',
 };
 
 const LEGACY_MODEL_ALIASES: Partial<Record<string, ChatModelId>> = {
   'google/gemini-3-pro-preview': 'google/gemini-3.1-pro-preview',
   'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
+  'google/gemini-3.5-flash': DEFAULT_CHAT_MODEL,
   'google/gemini-2.5-flash': DEFAULT_CHAT_MODEL,
   'google/gemini-3.1-flash-lite': DEFAULT_CHAT_MODEL,
 };

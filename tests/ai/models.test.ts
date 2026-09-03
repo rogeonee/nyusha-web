@@ -13,8 +13,8 @@ import {
 } from '@/lib/ai/models';
 
 describe('chat model registry', () => {
-  it('keeps Gemini 3.5 Flash as the default', () => {
-    expect(DEFAULT_CHAT_MODEL).toBe('google/gemini-3.5-flash');
+  it('keeps Gemini 3.8 Flash as the default', () => {
+    expect(DEFAULT_CHAT_MODEL).toBe('google/gemini-3.8-flash');
     expect(resolveChatModelId()).toBe(DEFAULT_CHAT_MODEL);
   });
 
@@ -24,7 +24,11 @@ describe('chat model registry', () => {
     expect(isChatModelId('openai/gpt-5.6-sol')).toBe(false);
   });
 
-  it('retires Gemini Flash-Lite to the default model', () => {
+  it('resolves retired Gemini models to the default model', () => {
+    expect(isChatModelId('google/gemini-3.5-flash')).toBe(false);
+    expect(resolveChatModelId('google/gemini-3.5-flash')).toBe(
+      DEFAULT_CHAT_MODEL,
+    );
     expect(isChatModelId('google/gemini-3.1-flash-lite')).toBe(false);
     expect(resolveChatModelId('google/gemini-3.1-flash-lite')).toBe(
       DEFAULT_CHAT_MODEL,
@@ -60,20 +64,20 @@ describe('chat model registry', () => {
           .map((model) => model.id),
       ),
     ).toEqual([
-      ['google/gemini-3.5-flash', 'google/gemini-3.1-pro-preview'],
+      ['google/gemini-3.8-flash', 'google/gemini-3.1-pro-preview'],
       ['openai/gpt-5.6-luna', 'openai/gpt-5.6-terra'],
     ]);
   });
 
   it('uses cross-provider fallbacks for everyday models', () => {
-    expect(getFallbackChatModelId('google/gemini-3.5-flash')).toBe(
+    expect(getFallbackChatModelId('google/gemini-3.8-flash')).toBe(
       'openai/gpt-5.6-luna',
     );
     expect(getFallbackChatModelId('openai/gpt-5.6-luna')).toBe(
-      'google/gemini-3.5-flash',
+      'google/gemini-3.8-flash',
     );
     expect(getFallbackChatModelId('openai/gpt-5.6-terra')).toBe(
-      'google/gemini-3.5-flash',
+      'google/gemini-3.8-flash',
     );
   });
 });
