@@ -14,7 +14,7 @@ function getOptions(modelId: string, reasoningLevelId: ChatReasoningLevelId) {
 
 describe('chat model provider configuration', () => {
   it('keeps Gemini reasoning and search on the direct Google provider', () => {
-    expect(getOptions('google/gemini-3.5-flash', 'high')).toEqual({
+    expect(getOptions('google/gemini-3.8-flash', 'high')).toEqual({
       google: {
         thinkingConfig: {
           thinkingLevel: 'high',
@@ -24,7 +24,7 @@ describe('chat model provider configuration', () => {
     });
     expect(
       Object.keys(
-        getWebSearchToolsForModel(getChatModelById('google/gemini-3.5-flash')),
+        getWebSearchToolsForModel(getChatModelById('google/gemini-3.8-flash')),
       ),
     ).toEqual(['google_search']);
   });
