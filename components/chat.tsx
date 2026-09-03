@@ -950,18 +950,18 @@ function ChatSession({
                           className="mb-5"
                         >
                           <div
-                            className={`flex flex-col ${
+                            className={`flex min-w-0 max-w-full flex-col ${
                               message.role === 'user'
                                 ? 'group items-end'
                                 : 'items-start'
                             }`}
                           >
                             <div
-                              className={`group relative ${
+                              className={`group relative min-w-0 max-w-full ${
                                 message.role === 'user'
                                   ? `${
                                       isEditing ? 'w-full ' : ''
-                                    }max-w-[85%] whitespace-pre-wrap`
+                                    }max-w-[85%] whitespace-pre-wrap break-words`
                                   : 'w-full'
                               }`}
                             >
@@ -981,7 +981,7 @@ function ChatSession({
                                     message.role === 'user'
                                       ? 'bg-secondary'
                                       : 'bg-transparent w-full'
-                                  } rounded-lg p-2`}
+                                  } min-w-0 max-w-full rounded-lg p-2`}
                                 >
                                   {reasoning ? (
                                     <ReasoningBlock text={reasoning} />
@@ -1023,7 +1023,7 @@ function ChatSession({
                                   {message.role === 'assistant' ? (
                                     <>
                                       <Streamdown
-                                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                        className="chat-markdown min-w-0 max-w-full break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
                                         plugins={{ math: mathPlugin }}
                                       >
                                         {text}

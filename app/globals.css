@@ -164,6 +164,16 @@
   }
 }
 
+/* Keep long inline formulas inside the message that owns them. Display math,
+ * tables, and code blocks already provide their own horizontal scrollers. */
+.chat-markdown .katex:not(.katex-display > .katex) {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: bottom;
+}
+
 .skeleton {
   * {
     pointer-events: none !important;
