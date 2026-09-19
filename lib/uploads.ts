@@ -64,6 +64,11 @@ const EXTENSION_MEDIA_TYPES: Record<string, AllowedMediaType> = {
   png: 'image/png',
 };
 
+export const FILE_UPLOAD_ACCEPT = [
+  ...Object.keys(EXTENSION_MEDIA_TYPES).map((extension) => `.${extension}`),
+  ...ALLOWED_MEDIA_TYPES,
+].join(',');
+
 function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf('.');
   return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : '';

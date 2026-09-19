@@ -1,6 +1,5 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
 import {
   useCallback,
   useEffect,
@@ -15,23 +14,26 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { IconArrowUp, IconStop } from '@/components/ui/icons';
 import {
   CheckIcon,
   ChevronRight,
-  ClipboardIcon,
-  PaperclipIcon,
+  Copy,
+  ArrowUp,
+  Square,
+  Plus,
   PencilIcon,
   RotateCcwIcon,
-  XIcon,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import { ReasoningBlock } from '@/components/reasoning-block';
 import { parseReasoningChunks } from '@/lib/ai/reasoning';
 import { MessageSources } from '@/components/message-sources';
-import AboutCard from '@/components/cards/aboutcard';
 import { ChatHeader } from '@/components/chat-header';
+import {
+  ComposerAttachments,
+  MessageAttachments,
+} from '@/components/chat-attachments';
 import { ChatModelSelector } from '@/components/chat-model-selector';
 import { ChatReasoningSelector } from '@/components/chat-reasoning-selector';
 import {
@@ -53,6 +55,7 @@ import {
   type ChatReasoningLevelId,
 } from '@/lib/ai/models';
 import {
+  FILE_UPLOAD_ACCEPT,
   MAX_FILENAME_LENGTH,
   MAX_UPLOAD_SIZE_BYTES,
   resolveMediaType,
@@ -123,14 +126,15 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+      className="chat-action"
       onClick={() => void handleCopy()}
+      aria-label={copied ? 'Скопировано' : 'Копировать'}
       title="Копировать"
     >
       {copied ? (
-        <CheckIcon className="size-3.5" />
+        <CheckIcon className="size-[18px]" />
       ) : (
-        <ClipboardIcon className="size-3.5" />
+        <Copy className="size-[18px]" strokeWidth={1.75} />
       )}
     </button>
   );
@@ -148,11 +152,12 @@ function UserMessageActions({
       <CopyButton text={text} />
       <button
         type="button"
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+        className="chat-action"
         onClick={onEdit}
+        aria-label="Редактировать"
         title="Редактировать"
       >
-        <PencilIcon className="size-3.5" />
+        <PencilIcon className="size-[18px]" strokeWidth={1.75} />
       </button>
     </div>
   );
@@ -166,7 +171,7 @@ function AssistantMessageActions({
 }: {
   text: string;
   latencyMs: number | null;
-  onRegenerate: () => void;
+  onRegenerate?: () => void;
   isDisabled: boolean;
 }) {
   const formatLatency = (ms: number) => {
@@ -177,17 +182,20 @@ function AssistantMessageActions({
   };
 
   return (
-    <div className="mt-1 flex w-full items-center gap-1">
+    <div className="mt-3 -ml-1 flex w-full items-center gap-0.5">
       <CopyButton text={text} />
-      <button
-        type="button"
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-        onClick={onRegenerate}
-        disabled={isDisabled}
-        title="Повторить"
-      >
-        <RotateCcwIcon className="size-3.5" />
-      </button>
+      {onRegenerate && (
+        <button
+          type="button"
+          className="chat-action"
+          onClick={onRegenerate}
+          disabled={isDisabled}
+          aria-label="Повторить"
+          title="Повторить"
+        >
+          <RotateCcwIcon className="size-[18px]" strokeWidth={1.75} />
+        </button>
+      )}
       {latencyMs !== null && (
         <span className="ml-1 text-xs text-muted-foreground">
           {formatLatency(latencyMs)}
@@ -195,18 +203,6 @@ function AssistantMessageActions({
       )}
     </div>
   );
-}
-
-function formatFileSize(sizeBytes: number) {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-
-  if (sizeBytes < 1024 * 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function buildStoragePath(chatId: string, filename: string) {
@@ -878,9 +874,16 @@ function ChatSession({
       {...dropHandlers}
     >
       <FileDropOverlay isVisible={isDragging} />
-      <ChatHeader />
+      <ChatHeader>
+        <ChatModelSelector
+          selectedModelId={currentModelId}
+          onModelChange={setCurrentModelId}
+        />
+      </ChatHeader>
 
-      <div className="relative flex-1">
+      <div
+        className={messages.length > 0 ? 'relative min-h-0 flex-1' : 'hidden'}
+      >
         <MessageScrollerProvider
           autoScroll
           defaultScrollPosition="last-anchor"
@@ -890,9 +893,7 @@ function ChatSession({
             <MessageScrollerViewport aria-label="Сообщения чата">
               <MessageScrollerContent
                 aria-busy={isAwaitingResponse}
-                className={`mx-auto w-full max-w-3xl gap-0 px-2 sm:px-4 ${
-                  messages.length > 0 ? 'pt-10' : ''
-                }`}
+                className="chat-column gap-0 pt-6 pb-6 md:pt-8"
               >
                 {!isOnline && (
                   <MessageScrollerItem
@@ -904,13 +905,7 @@ function ChatSession({
                     </div>
                   </MessageScrollerItem>
                 )}
-                {messages.length <= 0 ? (
-                  <MessageScrollerItem messageId="empty-chat">
-                    <div className="mx-auto mt-10 w-full max-w-xl">
-                      <AboutCard />
-                    </div>
-                  </MessageScrollerItem>
-                ) : (
+                {messages.length > 0 && (
                   <>
                     {messages.map((message) => {
                       const text = getMessageText(message);
@@ -947,7 +942,7 @@ function ChatSession({
                           key={message.id}
                           messageId={message.id}
                           scrollAnchor={message.role === 'user'}
-                          className="mb-5"
+                          className="mb-8 md:mb-10"
                         >
                           <div
                             className={`flex min-w-0 max-w-full flex-col ${
@@ -956,86 +951,65 @@ function ChatSession({
                                 : 'items-start'
                             }`}
                           >
-                            <div
-                              className={`group relative min-w-0 max-w-full ${
-                                message.role === 'user'
-                                  ? `${
-                                      isEditing ? 'w-full ' : ''
-                                    }max-w-[85%] whitespace-pre-wrap break-words`
-                                  : 'w-full'
-                              }`}
-                            >
-                              {isEditing ? (
-                                <MessageEditor
-                                  message={message}
-                                  setMode={(mode) => {
-                                    if (mode === 'view')
-                                      setEditingMessageId(null);
-                                  }}
-                                  setMessages={setMessages}
-                                  regenerate={regenerate}
-                                />
-                              ) : (
-                                <div
-                                  className={`${
-                                    message.role === 'user'
-                                      ? 'bg-secondary'
-                                      : 'bg-transparent w-full'
-                                  } min-w-0 max-w-full rounded-lg p-2`}
-                                >
-                                  {reasoning ? (
-                                    <ReasoningBlock text={reasoning} />
-                                  ) : null}
-                                  {files.length > 0 ? (
-                                    <div className="mb-2 flex flex-wrap gap-1.5">
-                                      {files.map((file) =>
-                                        file.mediaType?.startsWith('image/') &&
-                                        file.src ? (
-                                          <a
-                                            key={`${message.id}-file-${file.fileId ?? file.filename}`}
-                                            href={file.src}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="block size-32 overflow-hidden rounded-lg border border-border/70 bg-background/70"
-                                            title={file.filename}
-                                          >
-                                            {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied blob/object URL, not a remote asset for optimization */}
-                                            <img
-                                              src={file.src}
-                                              alt={file.filename}
-                                              className="size-full object-cover"
-                                            />
-                                          </a>
-                                        ) : (
-                                          <div
-                                            key={`${message.id}-file-${file.fileId ?? file.filename}`}
-                                            className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-xs text-muted-foreground"
-                                          >
-                                            <PaperclipIcon className="size-3" />
-                                            <span className="truncate max-w-[200px]">
-                                              {file.filename}
-                                            </span>
-                                          </div>
-                                        ),
-                                      )}
-                                    </div>
-                                  ) : null}
-                                  {message.role === 'assistant' ? (
-                                    <>
-                                      <Streamdown
-                                        className="chat-markdown min-w-0 max-w-full break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
-                                        plugins={{ math: mathPlugin }}
-                                      >
-                                        {text}
-                                      </Streamdown>
-                                      <MessageSources parts={message.parts} />
-                                    </>
-                                  ) : (
-                                    text
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            {files.length > 0 && (
+                              <MessageAttachments
+                                files={files}
+                                align={
+                                  message.role === 'user' ? 'end' : 'start'
+                                }
+                                className={hasText ? 'mb-1.5' : undefined}
+                              />
+                            )}
+                            {(hasText ||
+                              isEditing ||
+                              message.role === 'assistant') && (
+                              <div
+                                className={`group relative min-w-0 max-w-full ${
+                                  message.role === 'user'
+                                    ? isEditing
+                                      ? 'w-full'
+                                      : 'max-w-[90%] whitespace-pre-wrap break-words md:max-w-[75%]'
+                                    : 'w-full'
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <MessageEditor
+                                    message={message}
+                                    setMode={(mode) => {
+                                      if (mode === 'view')
+                                        setEditingMessageId(null);
+                                    }}
+                                    setMessages={setMessages}
+                                    regenerate={regenerate}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`${
+                                      message.role === 'user'
+                                        ? `rounded-3xl bg-[var(--user-message)] px-5 py-3 leading-7 ${files.length > 0 ? 'rounded-tr-lg' : ''}`
+                                        : 'bg-transparent w-full leading-7'
+                                    } min-w-0 max-w-full`}
+                                  >
+                                    {reasoning ? (
+                                      <ReasoningBlock text={reasoning} />
+                                    ) : null}
+                                    {message.role === 'assistant' ? (
+                                      <>
+                                        <Streamdown
+                                          className="chat-markdown min-w-0 max-w-full break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_code]:whitespace-pre-wrap [&_code]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:mx-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden"
+                                          plugins={{ math: mathPlugin }}
+                                        >
+                                          {text}
+                                        </Streamdown>
+                                        <MessageSources parts={message.parts} />
+                                      </>
+                                    ) : (
+                                      text
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {message.role === 'user' &&
                               !isAwaitingResponse &&
@@ -1047,16 +1021,21 @@ function ChatSession({
                                 />
                               )}
 
-                            {isLastAssistant && status === 'ready' && (
-                              <AssistantMessageActions
-                                text={text}
-                                latencyMs={lastLatencyMs}
-                                onRegenerate={() =>
-                                  void handleRegenerate(message.id)
-                                }
-                                isDisabled={isRegenerating || !isOnline}
-                              />
-                            )}
+                            {message.role === 'assistant' &&
+                              (!isLastAssistant || status === 'ready') && (
+                                <AssistantMessageActions
+                                  text={text}
+                                  latencyMs={
+                                    isLastAssistant ? lastLatencyMs : null
+                                  }
+                                  onRegenerate={
+                                    isLastAssistant
+                                      ? () => void handleRegenerate(message.id)
+                                      : undefined
+                                  }
+                                  isDisabled={isRegenerating || !isOnline}
+                                />
+                              )}
                           </div>
                         </MessageScrollerItem>
                       );
@@ -1064,10 +1043,10 @@ function ChatSession({
                     {isThinking ? (
                       <MessageScrollerItem
                         messageId={`${lastUserMessage?.id ?? id}:thinking`}
-                        className="mb-5"
+                        className="mb-8 md:mb-10"
                       >
                         <div className="flex whitespace-pre-wrap">
-                          <div className="rounded-lg bg-transparent p-2 text-sm text-muted-foreground">
+                          <div className="bg-transparent py-2 text-sm text-muted-foreground">
                             {normalizedStreamingReasoningText ? (
                               <Collapsible>
                                 <div className="flex items-center gap-3">
@@ -1151,84 +1130,57 @@ function ChatSession({
                 )}
               </MessageScrollerContent>
             </MessageScrollerViewport>
-            <MessageScrollerButton aria-label="К последнему сообщению" />
+            <MessageScrollerButton
+              className="size-9 rounded-full border shadow-sm"
+              aria-label="К последнему сообщению"
+            />
           </MessageScroller>
         </MessageScrollerProvider>
       </div>
 
-      <div className="sticky bottom-0 bg-background px-2 pb-4 sm:px-4">
-        <div className="mx-auto w-full max-w-3xl">
-          <Card className="p-2">
-            <form onSubmit={handleSubmit} className="space-y-1.5">
-              {pendingAttachments.length > 0 ? (
-                <div className="flex flex-wrap gap-2 px-1">
-                  {pendingAttachments.map((file) =>
-                    file.previewUrl ? (
-                      <div
-                        key={file.fileId}
-                        className="group relative size-20 overflow-hidden rounded-lg border border-border/70 bg-secondary/80"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview, not a remote asset */}
-                        <img
-                          src={file.previewUrl}
-                          alt={file.filename}
-                          className="size-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          className="absolute top-0.5 right-0.5 rounded-full bg-background/80 p-0.5 text-foreground shadow-sm transition-colors hover:bg-background"
-                          onClick={() => removePendingAttachment(file.fileId)}
-                          title="Удалить вложение"
-                        >
-                          <XIcon className="size-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div
-                        key={file.fileId}
-                        className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-secondary/80 px-2 py-1 text-xs text-muted-foreground"
-                      >
-                        <PaperclipIcon className="size-3" />
-                        <span className="max-w-[200px] truncate">
-                          {file.filename}
-                        </span>
-                        <span className="text-muted-foreground/70">
-                          {formatFileSize(file.sizeBytes)}
-                        </span>
-                        <button
-                          type="button"
-                          className="rounded p-0.5 transition-colors hover:bg-background"
-                          onClick={() => removePendingAttachment(file.fileId)}
-                          title="Удалить вложение"
-                        >
-                          <XIcon className="size-3" />
-                        </button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              ) : null}
+      <div
+        className={
+          messages.length === 0
+            ? 'flex min-h-0 flex-1 flex-col justify-center overflow-y-auto pb-[18dvh]'
+            : 'relative z-10 shrink-0 bg-background pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2'
+        }
+      >
+        <div className="chat-column">
+          {messages.length === 0 && (
+            <h1 className="mb-8 text-center text-[28px] font-medium tracking-tight sm:mb-10 sm:text-[32px]">
+              С чего начнём?
+            </h1>
+          )}
+          {!isOnline && messages.length === 0 && (
+            <p
+              className="mb-3 text-center text-sm text-muted-foreground"
+              role="status"
+            >
+              Нет соединения с интернетом
+            </p>
+          )}
+          <div className="chat-composer p-2">
+            <form onSubmit={handleSubmit} className="flex flex-col">
+              {pendingAttachments.length > 0 && (
+                <ComposerAttachments
+                  files={pendingAttachments}
+                  onRemove={removePendingAttachment}
+                />
+              )}
               {isUploading ? (
-                <p className="px-1 text-xs text-muted-foreground">
+                <p
+                  className="px-4 py-2 text-xs text-muted-foreground"
+                  role="status"
+                >
                   Загружаем файлы...
                 </p>
               ) : null}
-              <div className="flex flex-wrap items-center gap-1 px-1">
-                <ChatModelSelector
-                  selectedModelId={currentModelId}
-                  onModelChange={setCurrentModelId}
-                />
-                <ChatReasoningSelector
-                  selectedReasoningLevelId={currentReasoningLevelId}
-                  onReasoningLevelChange={setCurrentReasoningLevelId}
-                />
-              </div>
               <input
                 ref={fileInputRef}
                 type="file"
                 aria-label="Прикрепить файл"
                 className="hidden"
-                accept=".pdf,.docx,.txt,image/jpeg,image/png"
+                accept={FILE_UPLOAD_ACCEPT}
                 multiple
                 onChange={(event) => {
                   void handleFilePickerChange(event);
@@ -1237,17 +1189,18 @@ function ChatSession({
               {uploadError ? (
                 <p className="px-1 text-xs text-destructive">{uploadError}</p>
               ) : null}
-              <div className="flex items-end">
+              <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-end gap-x-1 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto]">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="mr-1 mb-0.5"
+                  className="col-start-1 row-start-2 rounded-full text-foreground hover:bg-foreground/10 sm:row-start-1"
                   disabled={!isOnline || isUploading}
                   onClick={() => fileInputRef.current?.click()}
+                  aria-label="Прикрепить файл"
                   title="Прикрепить файл"
                 >
-                  <PaperclipIcon className="size-4" />
+                  <Plus className="size-6" strokeWidth={1.75} />
                 </Button>
                 <Textarea
                   ref={textareaRef}
@@ -1258,34 +1211,48 @@ function ChatSession({
                   }}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  className="mr-2 max-h-[200px] min-h-10 w-[95%] resize-none border-0 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                  placeholder="Спроси что-нибудь..."
+                  aria-label="Сообщение"
+                  className="col-span-3 col-start-1 row-start-1 max-h-[200px] min-h-10 w-full resize-none border-0 bg-transparent px-3 py-2 text-base leading-6 shadow-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:col-span-1 sm:col-start-2 sm:px-1 md:text-base"
+                  placeholder="Спросите Nyusha"
                 />
-                {isAwaitingResponse ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mb-0.5"
-                    onClick={stop}
-                  >
-                    <IconStop />
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    disabled={
-                      (!input.trim() && pendingAttachments.length === 0) ||
-                      !isOnline ||
-                      isUploading
-                    }
-                    className="mb-0.5"
-                  >
-                    <IconArrowUp />
-                  </Button>
-                )}
+                <div className="col-start-2 row-start-2 flex h-10 justify-end sm:col-start-3 sm:row-start-1">
+                  <ChatReasoningSelector
+                    selectedReasoningLevelId={currentReasoningLevelId}
+                    onReasoningLevelChange={setCurrentReasoningLevelId}
+                  />
+                </div>
+                <div className="col-start-3 row-start-2 sm:col-start-4 sm:row-start-1">
+                  {isAwaitingResponse ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={stop}
+                      aria-label="Остановить ответ"
+                      title="Остановить ответ"
+                    >
+                      <Square className="size-4 fill-current" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      size="icon"
+                      aria-label="Отправить сообщение"
+                      title="Отправить сообщение"
+                      disabled={
+                        (!input.trim() && pendingAttachments.length === 0) ||
+                        !isOnline ||
+                        isUploading
+                      }
+                      className="rounded-full disabled:opacity-30"
+                    >
+                      <ArrowUp className="size-5" strokeWidth={2} />
+                    </Button>
+                  )}
+                </div>
               </div>
             </form>
-          </Card>
+          </div>
         </div>
       </div>
     </div>

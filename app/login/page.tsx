@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { Card } from '@/components/ui/card';
 import { getCurrentUser } from '@/lib/auth/session';
 import { LoginForm } from './login-form';
 
@@ -31,14 +30,19 @@ export default async function LoginPage({
   const errorMessage = error ? loginErrorMessages[error] : undefined;
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center px-4 py-8 md:py-12">
-      <Card className="w-full max-w-md p-6">
-        <h1 className="mb-2 text-xl font-semibold">Вход в Nyusha Chat</h1>
-        <p className="mb-6 text-sm text-muted-foreground">
+    <div className="relative flex min-h-dvh w-full items-center justify-center px-6 py-20">
+      <span className="absolute top-6 left-6 text-xl font-semibold tracking-tight">
+        Nyusha
+      </span>
+      <div className="w-full max-w-[360px]">
+        <h1 className="mb-3 text-center text-3xl font-medium tracking-tight">
+          С возвращением
+        </h1>
+        <p className="mb-8 text-center text-sm leading-relaxed text-muted-foreground">
           Используйте приглашенный email и пароль.
         </p>
         <LoginForm errorMessage={errorMessage} />
-      </Card>
+      </div>
     </div>
   );
 }

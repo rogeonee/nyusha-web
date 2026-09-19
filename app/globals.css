@@ -9,7 +9,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: geist;
+  --font-sans: geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: geist-mono;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -53,74 +53,68 @@
 }
 
 :root {
-  --radius: 0.5rem;
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(240 5.9% 10%);
-  --primary-foreground: hsl(0 0% 98%);
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-  --ring: hsl(240 10% 3.9%);
-  --chart-1: hsl(12 76% 61%);
-  --chart-2: hsl(173 58% 39%);
-  --chart-3: hsl(197 37% 24%);
-  --chart-4: hsl(43 74% 66%);
-  --chart-5: hsl(27 87% 67%);
-  --sidebar: hsl(0 0% 97%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(0 0% 92%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(0 0% 97%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #202020;
+  --card: #ffffff;
+  --card-foreground: #202020;
+  --popover: #ffffff;
+  --popover-foreground: #202020;
+  --primary: #171717;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #202020;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #ececec;
+  --accent-foreground: #202020;
+  --destructive: #dc3535;
+  --destructive-foreground: #ffffff;
+  --border: #e6e6e6;
+  --input: #dedede;
+  --ring: #999999;
+  --sidebar: #f9f9f9;
+  --sidebar-foreground: #202020;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeaea;
+  --sidebar-accent-foreground: #202020;
+  --sidebar-border: #e6e6e6;
+  --sidebar-ring: #999999;
+  --composer: #f4f4f4;
+  --user-message: #f0f0f0;
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 3.9%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 3.9%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
-  --chart-1: hsl(220 70% 50%);
-  --chart-2: hsl(160 60% 45%);
-  --chart-3: hsl(30 80% 55%);
-  --chart-4: hsl(280 65% 60%);
-  --chart-5: hsl(340 75% 55%);
-  --sidebar: hsl(0 0% 9%);
-  --sidebar-foreground: hsl(0 0% 95%);
-  --sidebar-primary: hsl(0 0% 98%);
-  --sidebar-primary-foreground: hsl(0 0% 9%);
-  --sidebar-accent: hsl(0 0% 13%);
-  --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(0 0% 9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #171717;
+  --card-foreground: #ededed;
+  --popover: #303030;
+  --popover-foreground: #f5f5f5;
+  --primary: #ffffff;
+  --primary-foreground: #171717;
+  --secondary: #292929;
+  --secondary-foreground: #ededed;
+  --muted: #171717;
+  --muted-foreground: #a0a0a0;
+  --accent: #3d3d3d;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5252;
+  --destructive-foreground: #ffffff;
+  --border: #262626;
+  --input: #3d3d3d;
+  --ring: #777777;
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #1b1b1b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #222222;
+  --sidebar-ring: #777777;
+  --composer: #212121;
+  --user-message: #292929;
 }
 
 @layer base {
@@ -129,13 +123,14 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
   }
 
   @font-face {
     font-family: 'geist';
     font-style: normal;
     font-weight: 100 900;
+    font-display: swap;
     src: url(/fonts/geist.woff2) format('woff2');
   }
 
@@ -143,6 +138,7 @@
     font-family: 'geist-mono';
     font-style: normal;
     font-weight: 100 900;
+    font-display: swap;
     src: url(/fonts/geist-mono.woff2) format('woff2');
   }
 }
@@ -231,4 +227,107 @@
 
 .suggestion-highlight {
   @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
+}
+
+/* Shared transcript/composer measure keeps both surfaces aligned. */
+.chat-column {
+  width: 100%;
+  max-width: 52rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+.chat-markdown {
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.chat-markdown > * + * {
+  margin-top: 1.25rem;
+}
+
+.chat-markdown [data-streamdown='table-wrapper'] {
+  border: 0;
+  border-radius: 0;
+}
+
+.chat-markdown :is(th, td) {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.chat-markdown :is(th, td):first-child {
+  padding-left: 0;
+}
+
+.chat-markdown :is(table, thead, tbody, th) {
+  background: transparent;
+}
+
+.chat-markdown table {
+  border: 0;
+}
+
+.chat-markdown :is(th, td) {
+  font-size: 0.9375rem;
+}
+
+.chat-markdown th {
+  font-weight: 600;
+}
+
+.chat-markdown [data-streamdown='code-block'] {
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.chat-composer {
+  background: var(--composer);
+  border: 1px solid transparent;
+  border-radius: 1.875rem;
+  transition: border-color 150ms ease;
+}
+
+.chat-composer:focus-within {
+  border-color: var(--input);
+}
+
+.chat-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.chat-action:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.chat-action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.chat-action:disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+[data-sidebar='content'] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@media (max-width: 639px) {
+  .chat-column {
+    padding-inline: 1rem;
+  }
 }

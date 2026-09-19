@@ -1,6 +1,6 @@
 'use client';
 
-import { Brain, Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import {
   CHAT_REASONING_COOKIE_NAME,
   chatReasoningLevels,
@@ -43,10 +43,9 @@ export function ChatReasoningSelector({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-8 max-w-[230px] justify-between gap-1.5 px-2 text-xs sm:text-sm"
+        className="h-10 max-w-[150px] justify-between gap-1.5 rounded-full px-3 text-sm font-normal text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
         disabled
       >
-        <Brain className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{selectedReasoningLevel.shortName}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </Button>
@@ -60,14 +59,19 @@ export function ChatReasoningSelector({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 max-w-[230px] justify-between gap-1.5 px-2 text-xs sm:text-sm"
+          aria-label="Уровень рассуждений"
+          className="h-10 max-w-[150px] justify-between gap-1.5 rounded-full px-3 text-sm font-normal text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
         >
-          <Brain className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate">{selectedReasoningLevel.shortName}</span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent
+        side="top"
+        align="end"
+        sideOffset={12}
+        className="w-64"
+      >
         {chatReasoningLevels.map((reasoningLevel) => (
           <DropdownMenuItem
             key={reasoningLevel.id}

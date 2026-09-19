@@ -45,10 +45,10 @@ export function ChatModelSelector({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-8 max-w-[230px] justify-between px-2 text-xs sm:text-sm"
+        className="h-10 max-w-[250px] justify-between gap-2 rounded-xl px-2 text-base font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         disabled
       >
-        <span className="truncate">{selectedModel.shortName}</span>
+        <span className="truncate">{selectedModel.name}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </Button>
     );
@@ -61,17 +61,21 @@ export function ChatModelSelector({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 max-w-[230px] justify-between px-2 text-xs sm:text-sm"
+          aria-label="Выбрать модель"
+          className="h-10 max-w-[250px] justify-between gap-2 rounded-xl px-2 text-base font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <span className="truncate">{selectedModel.shortName}</span>
+          <span className="truncate">{selectedModel.name}</span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent
+        align="start"
+        className="w-80 max-w-[calc(100vw-2rem)]"
+      >
         {chatModelProviders.map((provider, index) => (
           <Fragment key={provider.id}>
             {index > 0 ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">
+            <DropdownMenuLabel className="px-3 text-xs font-normal text-muted-foreground">
               {provider.name}
             </DropdownMenuLabel>
             <ChatModelItems
