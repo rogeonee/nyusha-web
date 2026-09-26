@@ -16,13 +16,15 @@ export default async function ChatLayout({
     redirect('/login');
   }
 
-  const defaultOpen = cookieStore.get('sidebar_state')?.value === 'true';
+  const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false';
 
   return (
     <QueryProvider>
       <SidebarProvider defaultOpen={defaultOpen}>
         <AppSidebar user={user} />
-        <SidebarInset className="min-w-0 overflow-hidden">{children}</SidebarInset>
+        <SidebarInset className="min-w-0 overflow-hidden">
+          {children}
+        </SidebarInset>
       </SidebarProvider>
     </QueryProvider>
   );

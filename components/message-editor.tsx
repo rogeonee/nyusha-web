@@ -94,9 +94,10 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
 
   return (
     <div className="flex w-full flex-col items-end gap-1">
-      <div className="min-w-0 w-full rounded-lg bg-secondary p-2 shadow-sm ring-1 ring-border/50">
+      <div className="min-w-0 w-full rounded-3xl bg-[var(--user-message)] p-5">
         <Textarea
           ref={ref}
+          aria-label="Редактировать сообщение"
           value={draft}
           disabled={submitting}
           onChange={(e) => {
@@ -117,7 +118,7 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
               setMode('view');
             }
           }}
-          className="max-h-[300px] min-h-0 w-full resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="max-h-[300px] min-h-0 w-full resize-none border-0 bg-transparent p-0 text-base leading-relaxed shadow-none md:text-base focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
         />
       </div>
@@ -129,9 +130,10 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground hover:text-foreground"
+          className="size-9 rounded-full text-muted-foreground hover:text-foreground"
           onClick={() => setMode('view')}
           disabled={submitting}
+          aria-label="Отмена"
           title="Отмена"
         >
           <XIcon className="size-3.5" />
@@ -140,9 +142,10 @@ export function MessageEditor<UI_MESSAGE extends UIMessage>({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground hover:text-foreground"
+          className="size-9 rounded-full text-muted-foreground hover:text-foreground"
           disabled={submitting || !draft.trim()}
           onClick={() => void handleSend()}
+          aria-label="Отправить"
           title="Отправить"
         >
           <ArrowUpIcon className="size-3.5" />

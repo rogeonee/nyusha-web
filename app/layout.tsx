@@ -6,11 +6,13 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Nyusha Chat',
-  description: 'Тестовый чат с Gemini Flash 2.0',
+  description: 'Nyusha — ваш семейный AI-чат.',
 };
 
 export const viewport = {
-  maximumScale: 1, // Disable auto-zoom on mobile Safari
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover' as const,
 };
 
 export default async function RootLayout({
@@ -19,7 +21,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ru" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider
           attribute="class"
