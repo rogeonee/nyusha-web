@@ -30,7 +30,7 @@ describe('chat model provider configuration', () => {
   });
 
   it('pins Luna to OpenAI with private, summarized reasoning', () => {
-    expect(getOptions('openai/gpt-5.6-luna', 'medium')).toEqual({
+    expect(getOptions('openai/gpt-6-luna', 'medium')).toEqual({
       openai: {
         reasoningEffort: 'medium',
         reasoningSummary: 'auto',
@@ -42,13 +42,13 @@ describe('chat model provider configuration', () => {
     });
     expect(
       Object.keys(
-        getWebSearchToolsForModel(getChatModelById('openai/gpt-5.6-luna')),
+        getWebSearchToolsForModel(getChatModelById('openai/gpt-6-luna')),
       ),
     ).toEqual(['web_search']);
   });
 
-  it('maps the full exposed reasoning scale for GPT-5.6', () => {
-    expect(getOptions('openai/gpt-5.6-luna', 'low')).toMatchObject({
+  it('maps the exposed reasoning scale for GPT-6 Luna and GPT-5.6 Terra', () => {
+    expect(getOptions('openai/gpt-6-luna', 'low')).toMatchObject({
       openai: {
         reasoningEffort: 'low',
       },
