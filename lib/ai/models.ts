@@ -62,12 +62,12 @@ export const chatModels = [
     thinkingConfig: { thinkingLevel: 'high', includeThoughts: true },
   },
   {
-    id: 'openai/gpt-5.6-luna',
-    name: 'GPT-5.6 Luna',
-    shortName: '5.6 Luna',
+    id: 'openai/gpt-6-luna',
+    name: 'GPT-6 Luna',
+    shortName: '6 Luna',
     provider: 'openai',
-    description: 'Fast, affordable GPT-5.6 model for everyday work',
-    sdkModelId: 'openai/gpt-5.6-luna',
+    description: 'Fast, affordable GPT-6 model for everyday work',
+    sdkModelId: 'openai/gpt-6-luna',
   },
   {
     id: 'openai/gpt-5.6-terra',
@@ -86,12 +86,13 @@ export const DEFAULT_CHAT_MODEL: ChatModelId = 'google/gemini-3.8-flash';
 export const DEFAULT_CHAT_REASONING_LEVEL: ChatReasoningLevelId = 'medium';
 const MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
   'google/gemini-3.1-pro-preview': 'google/gemini-3.8-flash',
-  'google/gemini-3.8-flash': 'openai/gpt-5.6-luna',
-  'openai/gpt-5.6-luna': 'google/gemini-3.8-flash',
+  'google/gemini-3.8-flash': 'openai/gpt-6-luna',
+  'openai/gpt-6-luna': 'google/gemini-3.8-flash',
   'openai/gpt-5.6-terra': 'google/gemini-3.8-flash',
 };
 
 const LEGACY_MODEL_ALIASES: Partial<Record<string, ChatModelId>> = {
+  'openai/gpt-5.6-luna': 'openai/gpt-6-luna',
   'google/gemini-3-pro-preview': 'google/gemini-3.1-pro-preview',
   'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
   'google/gemini-3.5-flash': DEFAULT_CHAT_MODEL,

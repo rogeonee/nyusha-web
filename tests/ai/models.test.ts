@@ -5,6 +5,7 @@ import {
   chatModelProviders,
   chatModels,
   chatReasoningLevels,
+  getChatModelById,
   getFallbackChatModelId,
   isChatModelId,
   isKnownChatReasoningLevelId,
@@ -18,10 +19,18 @@ describe('chat model registry', () => {
     expect(resolveChatModelId()).toBe(DEFAULT_CHAT_MODEL);
   });
 
-  it('allows GPT-5.6 Luna and Terra but not arbitrary model IDs', () => {
-    expect(isChatModelId('openai/gpt-5.6-luna')).toBe(true);
+  it('allows GPT-6 Luna and GPT-5.6 Terra but not arbitrary model IDs', () => {
+    expect(isChatModelId('openai/gpt-6-luna')).toBe(true);
     expect(isChatModelId('openai/gpt-5.6-terra')).toBe(true);
+    expect(isChatModelId('openai/gpt-5.6-luna')).toBe(false);
     expect(isChatModelId('openai/gpt-5.6-sol')).toBe(false);
+  });
+
+  it('resolves saved GPT-5.6 Luna selections to GPT-6 Luna', () => {
+    expect(resolveChatModelId('openai/gpt-5.6-luna')).toBe('openai/gpt-6-luna');
+    expect(getChatModelById('openai/gpt-5.6-luna').sdkModelId).toBe(
+      'openai/gpt-6-luna',
+    );
   });
 
   it('resolves retired Gemini models to the default model', () => {
@@ -65,15 +74,15 @@ describe('chat model registry', () => {
       ),
     ).toEqual([
       ['google/gemini-3.8-flash', 'google/gemini-3.1-pro-preview'],
-      ['openai/gpt-5.6-luna', 'openai/gpt-5.6-terra'],
+      ['openai/gpt-6-luna', 'openai/gpt-5.6-terra'],
     ]);
   });
 
   it('uses cross-provider fallbacks for everyday models', () => {
     expect(getFallbackChatModelId('google/gemini-3.8-flash')).toBe(
-      'openai/gpt-5.6-luna',
+      'openai/gpt-6-luna',
     );
-    expect(getFallbackChatModelId('openai/gpt-5.6-luna')).toBe(
+    expect(getFallbackChatModelId('openai/gpt-6-luna')).toBe(
       'google/gemini-3.8-flash',
     );
     expect(getFallbackChatModelId('openai/gpt-5.6-terra')).toBe(
