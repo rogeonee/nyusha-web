@@ -5,27 +5,27 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 ## Current State
 
 - **Completed:** Phase 0–4 plus Phase 5 hardening pass (login lockout with atomic increments, server-canonical chat context, duplicate/tamper guards, atomic assistant-slot reservations for daily limits, delete confirmations/toasts, offline submit blocking).
-- **Next phase:** Family evaluation of Gemini 3.8 Flash, GPT-6 Luna, and GPT-5.6 Terra.
+- **Next phase:** Family evaluation of Gemini 3.8 Flash, GPT-6 Luna, and GPT-6.1 Sol.
 - **Stack:** Next.js 16, React 19, AI SDK 6, Tailwind 4, Drizzle ORM, Postgres.
 - **Streaming:** `/api/chat` route + `useChat` hook via `@ai-sdk/react`, with `selectedChatModel` sent from client and validated against centralized allowlist.
 - **Uploads:** Phase A live with direct client upload: browser uses Vercel Blob client uploads via `/api/files/upload-token`; `/api/files/upload` now finalizes server-verified metadata in `chat_files` and chat route links attachments via `message_file_attachments`.
 - **Phase B:** Gemini Files reuse is now wired in `/api/chat`: runtime context hydration resolves file metadata from `chat_files`, refreshes expired/missing Gemini URIs on demand, and falls back to Blob URLs without failing the request.
-- **Models:** Central registry in `lib/ai/models.ts` exposes Gemini 3.8 Flash / 3.1 Pro directly through Google and GPT-6 Luna / GPT-5.6 Terra through AI Gateway pinned to OpenAI. Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
+- **Models:** Central registry in `lib/ai/models.ts` exposes Gemini 3.8 Flash / 3.1 Pro directly through Google and GPT-6 Luna / GPT-6.1 Sol through AI Gateway pinned to OpenAI. Server-side validation rejects unknown model IDs (400). Stream errors surface user-facing message.
 - **Model UX:** Header picker shows the full model name in the trigger and groups full model choices under Google and OpenAI. Gemini 3.8 Flash is the default; model choice is persisted per chat (`chats.model_id`), while `chat-model` cookie is only a default seed for brand-new chats.
 - **Reasoning:** User-facing reasoning picker is cookie-backed with Low / Medium / High and defaults to Medium. Gemini receives provider-native `thinkingConfig`; OpenAI models receive matching reasoning effort plus summarized reasoning with response storage disabled. Legacy Standard/Extended cookies resolve to Medium/High. `sendReasoning` defaults to true in AI SDK.
 - **Auth:** Invite-only credentials auth, JWT cookie sessions, DB-backed session records, and DB-backed lockout fields on `users` (`failed_login_attempts`, `locked_until`, `last_failed_login_at`). Gated by `FAMILY_ALLOWED_EMAILS`.
 - **DB schema:** `users`, `sessions`, `chats`, `messages`, `assistant_generation_reservations`, plus upload tables `chat_files` and `message_file_attachments`. Migrations in `drizzle/`.
 - **Layout:** shadcn sidebar primitives (`SidebarProvider` + `AppSidebar` + `SidebarInset`). Chat routes under `(chat)` route group; auth pages standalone. ChatGPT-inspired monochrome UI, centered empty composer, bottom conversation composer, responsive rail/drawer, and account/theme menu.
 - **Build/lint:** `pnpm build` and `pnpm lint` (`tsc --noEmit`) pass. React Doctor v0.9 uses `--scope full` (the old `--full` flag was removed); use changed scope to audit task regressions separately from repository-wide health.
-- **Tests:** Vitest runs 38 tests, including PGlite characterization coverage for quota reservations, message-tail deletion, idempotent message/attachment saves, auth lockout arithmetic, and model/provider routing.
-- **Validation:** `pnpm test`, `pnpm lint`, and `pnpm build` pass. Browser smoke scenarios (especially auth lockout + cross-account authz) should be re-checked with two real user sessions before production rollout.
+- **Tests:** Vitest runs 43 tests, including PGlite characterization coverage for quota reservations, message-tail deletion, idempotent message/attachment saves, auth lockout arithmetic, and model/provider routing.
+- **Validation:** `pnpm test`, `pnpm lint`, and `pnpm build` pass. Local production-build smoke verifies Sol sign-in, streaming, web search, and persisted history/model after reload. Auth lockout + cross-account authz still need two-session QA before rollout.
 
 ## Active Risks and Gotchas
 
 - `LanguageModelV1` vs `LanguageModel` type mismatch is still handled via cast, now isolated in `lib/ai/providers.ts`.
 - Preview model fallback retries happen only when primary stream setup fails before streaming starts; mid-stream provider failures still return an error message.
 - OpenAI model requests are pinned to the OpenAI provider, but billing mode is controlled in AI Gateway: team-level OpenAI BYOK uses the OpenAI account, while Gateway-managed credentials use Gateway credits and the catalog rate.
-- Saved GPT-5.6 Luna chat and cookie selections resolve to GPT-6 Luna; new chat requests must use the current allowlisted ID.
+- Saved GPT-5.6 Luna and Terra chat/cookie selections resolve to GPT-6 Luna and GPT-6.1 Sol respectively; new chat requests must use current allowlisted IDs.
 - Gemini preview IDs can change over time; keep `lib/ai/models.ts` updated if Google renames/deprecates model IDs.
 - Email uniqueness is case-normalized at app layer only (lowercase); no DB-level `citext`.
 - No pagination on chat list — fine for 2-4 users, would need limits if user base grows.
@@ -57,7 +57,7 @@ Record non-obvious decisions here. Delete entries once they're no longer relevan
 
 - **Streaming approach:** Chose `createUIMessageStream` + `createUIMessageStreamResponse` (not `streamText().toUIMessageStreamResponse()`) to get `onFinish` access for message persistence.
 - **Model routing:** Use a centralized provider-aware allowlist and resolver (`lib/ai/models.ts`, `lib/ai/providers.ts`) instead of hardcoding model IDs in the API route.
-- **Model lineup:** Keep Gemini 3.8 Flash as the default, retain Gemini 3.1 Pro for Google quality, use GPT-6 Luna and GPT-5.6 Terra as OpenAI alternatives, and leave Gemini Flash-Lite retired.
+- **Model lineup:** Keep Gemini 3.8 Flash as the default, retain Gemini 3.1 Pro for Google quality, use GPT-6 Luna for cost and standard GPT-6.1 Sol for quality (same input price as Terra, cheaper output/cache reads); leave Gemini Flash-Lite retired.
 - **Model selector UX:** The model picker is in the header; reasoning remains in the composer. `selectedChatModel` is always sent from client; server stores model per chat row and updates on change. Cookie is retained only to seed first message in a new chat.
 - **Reasoning selector UX:** `selectedReasoningLevel` is always sent from client and validated server-side, but is not stored in DB; cookie is the lightweight user preference for this family-scale app.
 - **Provider scope:** Gemini models route directly through Google; OpenAI models route through AI Gateway with `only: ['openai']` to prevent Azure/Bedrock routing. Team-level OpenAI BYOK can be enabled in Vercel without app code changes. Search tools and reasoning options are selected per provider.

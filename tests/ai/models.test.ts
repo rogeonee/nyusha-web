@@ -19,9 +19,11 @@ describe('chat model registry', () => {
     expect(resolveChatModelId()).toBe(DEFAULT_CHAT_MODEL);
   });
 
-  it('allows GPT-6 Luna and GPT-5.6 Terra but not arbitrary model IDs', () => {
+  it('allows GPT-6 Luna and GPT-6.1 Sol but not retired or arbitrary model IDs', () => {
     expect(isChatModelId('openai/gpt-6-luna')).toBe(true);
-    expect(isChatModelId('openai/gpt-5.6-terra')).toBe(true);
+    expect(isChatModelId('openai/gpt-6.1-sol')).toBe(true);
+    expect(isChatModelId('openai/gpt-5.6-terra')).toBe(false);
+    expect(isChatModelId('openai/gpt-6.1-sol-fast')).toBe(false);
     expect(isChatModelId('openai/gpt-5.6-luna')).toBe(false);
     expect(isChatModelId('openai/gpt-5.6-sol')).toBe(false);
   });
@@ -30,6 +32,13 @@ describe('chat model registry', () => {
     expect(resolveChatModelId('openai/gpt-5.6-luna')).toBe('openai/gpt-6-luna');
     expect(getChatModelById('openai/gpt-5.6-luna').sdkModelId).toBe(
       'openai/gpt-6-luna',
+    );
+  });
+
+  it('resolves saved Terra chats and cookies to standard GPT-6.1 Sol', () => {
+    expect(resolveChatModelId('openai/gpt-5.6-terra')).toBe('openai/gpt-6.1-sol');
+    expect(getChatModelById('openai/gpt-5.6-terra').sdkModelId).toBe(
+      'openai/gpt-6.1-sol',
     );
   });
 
@@ -74,7 +83,7 @@ describe('chat model registry', () => {
       ),
     ).toEqual([
       ['google/gemini-3.8-flash', 'google/gemini-3.1-pro-preview'],
-      ['openai/gpt-6-luna', 'openai/gpt-5.6-terra'],
+      ['openai/gpt-6-luna', 'openai/gpt-6.1-sol'],
     ]);
   });
 
@@ -85,7 +94,7 @@ describe('chat model registry', () => {
     expect(getFallbackChatModelId('openai/gpt-6-luna')).toBe(
       'google/gemini-3.8-flash',
     );
-    expect(getFallbackChatModelId('openai/gpt-5.6-terra')).toBe(
+    expect(getFallbackChatModelId('openai/gpt-6.1-sol')).toBe(
       'google/gemini-3.8-flash',
     );
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getChatModelById, type ChatReasoningLevelId } from '@/lib/ai/models';
 import {
+  getLanguageModel,
   getProviderOptionsForModel,
   getWebSearchToolsForModel,
 } from '@/lib/ai/providers';
@@ -47,16 +48,36 @@ describe('chat model provider configuration', () => {
     ).toEqual(['web_search']);
   });
 
-  it('maps the exposed reasoning scale for GPT-6 Luna and GPT-5.6 Terra', () => {
+  it('maps the exposed reasoning scale for GPT-6 Luna', () => {
     expect(getOptions('openai/gpt-6-luna', 'low')).toMatchObject({
       openai: {
         reasoningEffort: 'low',
       },
     });
-    expect(getOptions('openai/gpt-5.6-terra', 'high')).toMatchObject({
-      openai: {
-        reasoningEffort: 'high',
-      },
-    });
   });
+
+  it.each(['low', 'medium', 'high'] as const)(
+    'routes Sol through AI Gateway pinned to OpenAI with %s reasoning and web search',
+    (reasoningLevel) => {
+      const model = getLanguageModel('openai/gpt-6.1-sol');
+      if (typeof model === 'string') {
+        throw new Error('Expected an AI Gateway model instance');
+      }
+      expect(model.provider).toBe('gateway');
+      expect(model.modelId).toBe('openai/gpt-6.1-sol');
+      expect(getOptions('openai/gpt-6.1-sol', reasoningLevel)).toEqual({
+        openai: {
+          reasoningEffort: reasoningLevel,
+          reasoningSummary: 'auto',
+          store: false,
+        },
+        gateway: { only: ['openai'] },
+      });
+      expect(
+        Object.keys(
+          getWebSearchToolsForModel(getChatModelById('openai/gpt-6.1-sol')),
+        ),
+      ).toEqual(['web_search']);
+    },
+  );
 });
