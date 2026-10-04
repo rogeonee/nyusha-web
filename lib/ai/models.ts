@@ -70,12 +70,12 @@ export const chatModels = [
     sdkModelId: 'openai/gpt-6-luna',
   },
   {
-    id: 'openai/gpt-5.6-terra',
-    name: 'GPT-5.6 Terra',
-    shortName: '5.6 Terra',
+    id: 'openai/gpt-6.1-sol',
+    name: 'GPT-6.1 Sol',
+    shortName: '6.1 Sol',
     provider: 'openai',
-    description: 'Balanced GPT-5.6 model for more demanding tasks',
-    sdkModelId: 'openai/gpt-5.6-terra',
+    description: 'Strong GPT-6.1 reasoning for more demanding tasks',
+    sdkModelId: 'openai/gpt-6.1-sol',
   },
 ] as const;
 
@@ -88,10 +88,11 @@ const MODEL_FALLBACKS: Partial<Record<ChatModelId, ChatModelId>> = {
   'google/gemini-3.1-pro-preview': 'google/gemini-3.8-flash',
   'google/gemini-3.8-flash': 'openai/gpt-6-luna',
   'openai/gpt-6-luna': 'google/gemini-3.8-flash',
-  'openai/gpt-5.6-terra': 'google/gemini-3.8-flash',
+  'openai/gpt-6.1-sol': 'google/gemini-3.8-flash',
 };
 
 const LEGACY_MODEL_ALIASES: Partial<Record<string, ChatModelId>> = {
+  'openai/gpt-5.6-terra': 'openai/gpt-6.1-sol',
   'openai/gpt-5.6-luna': 'openai/gpt-6-luna',
   'google/gemini-3-pro-preview': 'google/gemini-3.1-pro-preview',
   'google/gemini-3-flash-preview': DEFAULT_CHAT_MODEL,
