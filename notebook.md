@@ -55,6 +55,7 @@ Agent working notebook. Read the usage rules in CLAUDE.md before writing here.
 
 Record non-obvious decisions here. Delete entries once they're no longer relevant.
 
+- **Next security patch:** Use 16.4.2 to include the October 14 fixes while preserving the workspace's seven-day package age policy; 16.4.3 is still inside that window.
 - **Streaming approach:** Chose `createUIMessageStream` + `createUIMessageStreamResponse` (not `streamText().toUIMessageStreamResponse()`) to get `onFinish` access for message persistence.
 - **Model routing:** Use a centralized provider-aware allowlist and resolver (`lib/ai/models.ts`, `lib/ai/providers.ts`) instead of hardcoding model IDs in the API route.
 - **Model lineup:** Keep Gemini 3.8 Flash as the default, retain Gemini 3.1 Pro for Google quality, use GPT-6 Luna for cost and standard GPT-6.1 Sol for quality (same input price as Terra, cheaper output/cache reads); leave Gemini Flash-Lite retired.
