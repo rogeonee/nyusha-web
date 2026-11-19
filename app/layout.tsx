@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -31,7 +30,6 @@ export default async function RootLayout({
         >
           <Toaster position="top-center" />
           {children}
-          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>
